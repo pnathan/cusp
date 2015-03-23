@@ -427,6 +427,7 @@ public class SwankInterface {
    DataOutputStream                               commandInterface = null;
    Process                                        lispEngine;
 
+   /** Number of tries we attempt to connect to Lisp */
    private final int                              connect_retries  = 3;
 
    /** Holds whether we are connected to Swank. */
@@ -712,6 +713,7 @@ public class SwankInterface {
 
    // FIXME: right now implemented only for sbcl. In this case command is a
    // filepath to sbcl
+   // FIXME: STOP THE COPYPASTA.
    public boolean connect(final String flavor, final String command) {
       this.connected = false;
       this.currPackage = "COMMON-LISP-USER";
@@ -795,6 +797,9 @@ public class SwankInterface {
       return this.connected;
    }
 
+   /***
+    * Signals listeners that a disconnection event is occurring and instructs Swank to quit lisp.
+    */
    public void disconnect() {
       this.connected = false;
       signalListeners(this.disconnectListeners, new LispNode());
@@ -829,7 +834,6 @@ public class SwankInterface {
             this.listener.running = false;
          }
          else {
-            this.lispEngine.destroy();
             System.err.println("lisp instance wasn't running.");
          }
       }

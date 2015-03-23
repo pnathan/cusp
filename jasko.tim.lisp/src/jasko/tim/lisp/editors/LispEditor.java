@@ -344,15 +344,15 @@ public class LispEditor extends TextEditor implements ILispEditor {
                                   .getPreferenceStore()
                                   .getString(PreferenceConstants.BUILD_TYPE)
                                   .equals(PreferenceConstants.USE_AUTO_BUILD);
-         if ( LispPlugin.getDefault()
-                  .getSwank() != null) {
-         topForms = LispUtil.getTopLevelItems(LispParser.parse(doc.get() + "\n"),
-                                              LispPlugin.getDefault()
-                                                        .getSwank()
-                                                        .getCurrPackage());
-         
-         TopLevelItemSort sorter = new TopLevelItemSort();
-         sorter.sortItems(topForms, TopLevelItemSort.Sort.Position);
+         if (LispPlugin.getDefault().getSwank() != null) {
+            topForms = LispUtil.getTopLevelItems(LispParser.parse(doc.get() +
+                                                          "\n"),
+                                                 LispPlugin.getDefault()
+                                                           .getSwank()
+                                                           .getCurrPackage());
+
+            TopLevelItemSort sorter = new TopLevelItemSort();
+            sorter.sortItems(topForms, TopLevelItemSort.Sort.Position);
          }
       }
    }
@@ -444,29 +444,31 @@ public class LispEditor extends TextEditor implements ILispEditor {
       IDocument doc = getDocument();
       if (true /* LispBuilder.checkLisp(getIFile()) */) {
          SwankInterface swank = LispPlugin.getDefault().getSwank();
-         ArrayList<TopLevelItem> newForms = LispUtil.getTopLevelItems(LispParser.parse(doc.get() +
-                                                                               "\n)"),
-                                                                      swank.getCurrPackage());
-         TopLevelItemSort sorter = new TopLevelItemSort();
-         sorter.sortItems(newForms, TopLevelItemSort.Sort.Position);
+         if (swank != null) {
+            ArrayList<TopLevelItem> newForms = LispUtil.getTopLevelItems(LispParser.parse(doc.get() +
+                                                                                  "\n)"),
+                                                                         swank.getCurrPackage());
+            TopLevelItemSort sorter = new TopLevelItemSort();
+            sorter.sortItems(newForms, TopLevelItemSort.Sort.Position);
 
-         ArrayList<TopLevelItem> toDefine = undefineRemovedForms(newForms);
+            ArrayList<TopLevelItem> toDefine = undefineRemovedForms(newForms);
 
-         Position[] pos = null;
-         try {
-            pos = doc.getPositions(CHANGED_POS_FOR_COMPILE);
-         }
-         catch (BadPositionCategoryException e) {
-            e.printStackTrace();
-            pos = null;
-         }
-         if (pos == null || pos.length == 0) { // compile whole file
-            if (LispBuilder.checkLisp(getIFile())) {
-               LispBuilder.compileFile(getIFile(), false);
+            Position[] pos = null;
+            try {
+               pos = doc.getPositions(CHANGED_POS_FOR_COMPILE);
             }
-         }
-         else {
-            compileForms(getFormsToCompile(pos, newForms, toDefine));
+            catch (BadPositionCategoryException e) {
+               e.printStackTrace();
+               pos = null;
+            }
+            if (pos == null || pos.length == 0) { // compile whole file
+               if (LispBuilder.checkLisp(getIFile())) {
+                  LispBuilder.compileFile(getIFile(), false);
+               }
+            }
+            else {
+               compileForms(getFormsToCompile(pos, newForms, toDefine));
+            }
          }
       }
       try {
