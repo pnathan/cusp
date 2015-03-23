@@ -29,7 +29,13 @@ public class LoadAsdAction implements IActionDelegate {
 			if (obj instanceof IFile) {
 				IFile file = (IFile) obj;
 				LispMarkers.deletePackageErrorMarkers(file.getProject());
-				LispPlugin.getDefault().getSwank().compileAndLoadAsd(file,false);
+				try {
+               LispPlugin.getDefault().getSwank().compileAndLoadAsd(file,false);
+            }
+            catch (SwankNotFoundException e) {
+               // TODO Auto-generated catch block
+               e.printStackTrace();
+            }
 			}
 		}
 	}

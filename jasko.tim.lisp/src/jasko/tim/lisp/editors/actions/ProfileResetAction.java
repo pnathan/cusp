@@ -1,5 +1,6 @@
 package jasko.tim.lisp.editors.actions;
 
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.editors.LispEditor;
 
 public class ProfileResetAction extends LispAction {
@@ -13,7 +14,13 @@ public static final String ID = "jasko.tim.lisp.actions.ProfileResetAction";
 	}
 	
 	public void run() {
-		getSwank().sendProfileReset(null);
+		try {
+         getSwank().sendProfileReset(null);
+      }
+      catch (SwankNotFoundException e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
+      }
 	}
 
 }

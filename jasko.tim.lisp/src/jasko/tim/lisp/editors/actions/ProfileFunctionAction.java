@@ -1,5 +1,6 @@
 package jasko.tim.lisp.editors.actions;
 
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.editors.ILispEditor;
 import jasko.tim.lisp.swank.*;
 
@@ -18,11 +19,17 @@ public class ProfileFunctionAction extends LispAction {
 		String symbol = getSymbol();
 		
 		if (!symbol.equals("")) {
-			getSwank().sendToggleProfileFunction(symbol, getPackage(), new SwankRunnable() {
-				public void run() {
-					editor.showMessage(result.getf(":return").getf(":ok").value);
-				}
-			});
+			try {
+            getSwank().sendToggleProfileFunction(symbol, getPackage(), new SwankRunnable() {
+            	public void run() {
+            		editor.showMessage(result.getf(":return").getf(":ok").value);
+            	}
+            });
+         }
+         catch (SwankNotFoundException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+         }
 		}
 	}
 }

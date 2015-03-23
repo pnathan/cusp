@@ -4,6 +4,7 @@
 package jasko.tim.lisp.editors.actions;
 
 import jasko.tim.lisp.LispPlugin;
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.editors.LispEditor;
 import jasko.tim.lisp.preferences.PreferenceConstants;
 import jasko.tim.lisp.views.ReplView;
@@ -36,10 +37,22 @@ public class EvalTopLevelExpQuickAction extends LispAction {
     			repl.EvalStateHandle(exp+"\n", cleanCmd);
     			ReplView.switchToRepl();
     		} catch ( Exception e ){
-    			getSwank().sendEval(exp, null);
+    			try {
+               getSwank().sendEval(exp, null);
+            }
+            catch (SwankNotFoundException e1) {
+               // TODO Auto-generated catch block
+               e1.printStackTrace();
+            }
     		}        	
         } else {
-			getSwank().sendEval(exp, null);        	
+			try {
+            getSwank().sendEval(exp, null);
+         }
+         catch (SwankNotFoundException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+         }        	
         }
 	}
 	

@@ -4,6 +4,7 @@
 package jasko.tim.lisp.views;
 
 import jasko.tim.lisp.LispPlugin;
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.swank.SwankInterface;
 import jasko.tim.lisp.views.repl.PackageDialog;
 
@@ -25,20 +26,27 @@ public class TestAction extends Action {
 	}
 
 	public void run() {
-		SwankInterface swank = LispPlugin.getDefault().getSwank();
-		String hasunit = swank.sendEvalAndGrab("(some #'(lambda (x) " +
-				"(equal \"LISP-UNIT\" (package-name x))) (list-all-packages))", 1000);
-		if( swank != null && "T".equalsIgnoreCase(hasunit) && swank.getUseUnitTest() ){
-			PackageDialog pd = 
-				new PackageDialog(shell,
-						swank.getPackagesWithTests(1000), 
-						swank.getlastTestPackage(),true);
-			if (pd.open() == Dialog.OK) {
-				swank.sendRunTests(pd.getPackage(), new TestsRunnable());
-			}					
-		} else {
-			ArrayList<String> strings = new ArrayList<String>(2);
-			strings.add("Cannot run tests,");
-		}
+      try {
+         SwankInterface swank = LispPlugin.getDefault().getSwank();
+         String hasunit = swank.sendEvalAndGrab("(some #'(lambda (x) " +
+                  "(equal \"LISP-UNIT\" (package-name x))) (list-all-packages))", 1000);
+            if( swank != null && "T".equalsIgnoreCase(hasunit) && swank.getUseUnitTest() ){
+               PackageDialog pd = 
+                  new PackageDialog(shell,
+                        swank.getPackagesWithTests(1000), 
+                        swank.getlastTestPackage(),true);
+               if (pd.open() == Dialog.OK) {
+                  swank.sendRunTests(pd.getPackage(), new TestsRunnable());
+               }              
+            } else {
+               ArrayList<String> strings = new ArrayList<String>(2);
+               strings.add("Cannot run tests,");
+            }
+      }
+      catch (SwankNotFoundException e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
+      }
+		
 	}
 }

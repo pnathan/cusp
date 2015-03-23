@@ -1,5 +1,6 @@
 package jasko.tim.lisp.editors.actions;
 
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.editors.ILispEditor;
 import jasko.tim.lisp.editors.LispEditor;
 import jasko.tim.lisp.swank.*;
@@ -29,9 +30,14 @@ public class FindDefinitionAction extends LispAction {
       String symbol = getSymbol();
 
       if ( !symbol.equals("")) {
-         getSwank().sendFindDefinitions(symbol,
-                                        getPackage(),
-                                        new OpenDefinitionRunnable(symbol));
+         try {
+            getSwank().sendFindDefinitions(symbol,
+                                           getPackage(),
+                                           new OpenDefinitionRunnable(symbol));
+         }
+         catch (SwankNotFoundException e) {
+            e.printStackTrace();
+         }
       }
 
    }
@@ -118,10 +124,14 @@ public class FindDefinitionAction extends LispAction {
          int position = location.getf(":position").asInt();
          String snippet = location.getf(":snippet").value;
 
-         path = getSwank().translateRemoteFilePath(path);
+         try {
+            path = getSwank().translateRemoteFilePath(path);
+            LispEditor.jumpToDefinition(path, position, snippet, symbol);
 
-         LispEditor.jumpToDefinition(path, position, snippet, symbol);
-
+         }
+         catch (SwankNotFoundException e) {
+            e.printStackTrace();
+         }
       }
    }
 

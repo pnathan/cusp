@@ -2,6 +2,7 @@ package jasko.tim.lisp.editors.actions;
 
 import org.eclipse.swt.widgets.Display;
 
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.editors.LispEditor;
 import jasko.tim.lisp.util.LispUtil;
 
@@ -20,7 +21,13 @@ public class EvalFileAction extends LispAction {
             return;
         }
         
-        getSwank().sendEval(editor.getDocument().get(), null);
+        try {
+         getSwank().sendEval(editor.getDocument().get(), null);
+      }
+      catch (SwankNotFoundException e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
+      }
         /*new SwankRunnable() {
             public void run() {
                 LispNode res = this.result.getf(":return").getf(":ok").getf(":present");

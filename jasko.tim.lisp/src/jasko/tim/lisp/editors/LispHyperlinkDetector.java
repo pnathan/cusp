@@ -1,6 +1,7 @@
 package jasko.tim.lisp.editors;
 
 import jasko.tim.lisp.LispPlugin;
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.swank.SwankInterface;
 import jasko.tim.lisp.util.LispUtil;
 
@@ -56,14 +57,18 @@ public class LispHyperlinkDetector implements IHyperlinkDetector {
 				haveDefinition = false; 
 			}
 			else {
-				SwankInterface swank = LispPlugin.getDefault().getSwank();
-				if (swank != null) {
-				   haveDefinition = swank.haveDefinitions(function, 
-						LispUtil.getPackage(doc.get()+"\n",range[0]), TIMEOUT);
-				}
-				else {
-				   haveDefinition = false;
-				}
+            haveDefinition = false;
+
+				
+            try {
+               SwankInterface swank = LispPlugin.getDefault().getSwank();
+               haveDefinition = swank.haveDefinitions(function, 
+                                                      LispUtil.getPackage(doc.get()+"\n",range[0]), TIMEOUT);
+            }
+            catch (SwankNotFoundException e) {
+               // TODO Auto-generated catch block
+               e.printStackTrace();
+            }
 			}
 		}
 		if( haveDefinition ) {

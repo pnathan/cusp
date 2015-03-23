@@ -8,6 +8,7 @@ import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.MenuItem;
 
 import jasko.tim.lisp.LispPlugin;
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.views.repl.ReplHistory;
 
 /**
@@ -20,7 +21,13 @@ public class InspectorGadget extends ReplHistory {
 	}
 	
 	protected void sendInspect(String id) {
-		LispPlugin.getDefault().getSwank().sendInspectInspectedPart(id, new InspectorRunnable());
+		try {
+         LispPlugin.getDefault().getSwank().sendInspectInspectedPart(id, new InspectorRunnable());
+      }
+      catch (SwankNotFoundException e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
+      }
 	}
 	
 	protected void showInspectableMenu(final InspectableRegion region) {

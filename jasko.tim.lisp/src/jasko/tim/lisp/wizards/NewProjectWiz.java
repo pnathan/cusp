@@ -11,6 +11,7 @@
 package jasko.tim.lisp.wizards;
 
 import jasko.tim.lisp.LispPlugin;
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.builder.LispNature;
 
 import org.eclipse.jface.viewers.*;
@@ -22,6 +23,7 @@ import org.eclipse.ui.ide.IDE;
 import org.eclipse.core.runtime.*;
 import org.eclipse.core.resources.*;
 import org.eclipse.core.runtime.CoreException;
+
 
 
 import java.io.*;
@@ -198,7 +200,13 @@ public class NewProjectWiz extends Wizard implements INewWizard {
 		newProject.open(monitor);
 		
 
-		LispPlugin.getDefault().getSwank().compileAndLoadAsd(asd,true);
+		try {
+         LispPlugin.getDefault().getSwank().compileAndLoadAsd(asd,true);
+      }
+      catch (SwankNotFoundException e1) {
+         // TODO Auto-generated catch block
+         e1.printStackTrace();
+      }
 
 		monitor.setTaskName("Opening files for editing...");
 		getShell().getDisplay().asyncExec(new Runnable() {

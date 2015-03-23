@@ -1,6 +1,7 @@
 package jasko.tim.lisp.editors.actions;
 
 import jasko.tim.lisp.LispPlugin;
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.editors.ILispEditor;
 import jasko.tim.lisp.editors.LispEditor;
 import jasko.tim.lisp.swank.SwankInterface;
@@ -29,7 +30,6 @@ public abstract class LispAction extends Action implements IEditorActionDelegate
 	public void run(IAction action) {
 		run();
 	}
-	
 
 	public void selectionChanged(IAction action, ISelection selection) {
 
@@ -37,7 +37,7 @@ public abstract class LispAction extends Action implements IEditorActionDelegate
 	
 	// Handy util functions
 	
-	protected static SwankInterface getSwank() {
+	protected static SwankInterface getSwank() throws SwankNotFoundException {
 		return LispPlugin.getDefault().getSwank();
 	}
 	

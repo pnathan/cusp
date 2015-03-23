@@ -2,6 +2,7 @@ package jasko.tim.lisp.editors;
 
 // import jasko.tim.lisp.ColorManager;
 import jasko.tim.lisp.LispPlugin;
+import jasko.tim.lisp.SwankNotFoundException;
 // import jasko.tim.lisp.ColorManager.ColorChangeEvent;
 import jasko.tim.lisp.editors.assist.LispInformationControlManager;
 import jasko.tim.lisp.editors.outline.LispOutlinePage;
@@ -344,15 +345,19 @@ public class LispEditor extends TextEditor implements ILispEditor {
                                   .getPreferenceStore()
                                   .getString(PreferenceConstants.BUILD_TYPE)
                                   .equals(PreferenceConstants.USE_AUTO_BUILD);
-         if (LispPlugin.getDefault().getSwank() != null) {
+
+         try {
             topForms = LispUtil.getTopLevelItems(LispParser.parse(doc.get() +
                                                           "\n"),
                                                  LispPlugin.getDefault()
                                                            .getSwank()
                                                            .getCurrPackage());
-
             TopLevelItemSort sorter = new TopLevelItemSort();
             sorter.sortItems(topForms, TopLevelItemSort.Sort.Position);
+         }
+         catch (SwankNotFoundException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
          }
       }
    }
@@ -443,8 +448,10 @@ public class LispEditor extends TextEditor implements ILispEditor {
    private void compileOnSave() {
       IDocument doc = getDocument();
       if (true /* LispBuilder.checkLisp(getIFile()) */) {
-         SwankInterface swank = LispPlugin.getDefault().getSwank();
-         if (swank != null) {
+         SwankInterface swank;
+         try {
+            swank = LispPlugin.getDefault().getSwank();
+
             ArrayList<TopLevelItem> newForms = LispUtil.getTopLevelItems(LispParser.parse(doc.get() +
                                                                                   "\n)"),
                                                                          swank.getCurrPackage());
@@ -469,6 +476,11 @@ public class LispEditor extends TextEditor implements ILispEditor {
             else {
                compileForms(getFormsToCompile(pos, newForms, toDefine));
             }
+
+         }
+         catch (SwankNotFoundException e1) {
+            // TODO Auto-generated catch block
+            e1.printStackTrace();
          }
       }
       try {
@@ -722,25 +734,30 @@ public class LispEditor extends TextEditor implements ILispEditor {
       }
 
       // === undefine removed forms (at the moment functions and tests only)
-      boolean undefineTests = LispPlugin.getDefault()
-                                        .getSwank()
-                                        .getUseUnitTest();
-      for (String itm : toUndefine) {
-         String[] item = itm.split(",");
-         LispBuilder.CompileListener cl = new LispBuilder.CompileListener(this.getIFile(),
-                                                                          false);
-         if (item[0].equalsIgnoreCase("defun")) {
-            LispPlugin.getDefault()
-                      .getSwank()
-                      .sendUndefine(item[1], item[2], cl);
-         }
-         else
-            if (undefineTests && item[0].equalsIgnoreCase("define-test")) {
+      try {
+          boolean undefineTests = LispPlugin.getDefault().getSwank().getUseUnitTest();
+
+         for (String itm : toUndefine) {
+            String[] item = itm.split(",");
+            LispBuilder.CompileListener cl = new LispBuilder.CompileListener(this.getIFile(),
+                                                                             false);
+            if (item[0].equalsIgnoreCase("defun")) {
                LispPlugin.getDefault()
                          .getSwank()
-                         .sendUndefineTest(item[1], item[2], cl);
+                         .sendUndefine(item[1], item[2], cl);
             }
+            else
+               if (undefineTests && item[0].equalsIgnoreCase("define-test")) {
+                  LispPlugin.getDefault()
+                            .getSwank()
+                            .sendUndefineTest(item[1], item[2], cl);
+               }
 
+         }
+      }
+      catch (SwankNotFoundException e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
       }
 
       topForms = newForms;

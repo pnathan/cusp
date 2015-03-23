@@ -1,5 +1,6 @@
 package jasko.tim.lisp.editors.actions;
 
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.editors.LispEditor;
 
 public class ProfileReportAction extends LispAction {
@@ -13,7 +14,13 @@ public class ProfileReportAction extends LispAction {
 	}
 	
 	public void run() {
-		getSwank().sendReportProfile(null);
+		try {
+         getSwank().sendReportProfile(null);
+      }
+      catch (SwankNotFoundException e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
+      }
 	}
 
 }

@@ -2,6 +2,7 @@ package jasko.tim.lisp.editors.actions;
 
 import java.util.ArrayList;
 
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.editors.LispEditor;
 import jasko.tim.lisp.swank.*;
 import jasko.tim.lisp.views.*;
@@ -19,8 +20,14 @@ public class FindCallersAction extends LispAction {
 	public void run() {
 		final String symbol = getSymbol();
 
-		boolean haveDefinition = getSwank().haveDefinitions(symbol, 
-				getPackage(), TIMEOUT);
+		boolean haveDefinition;
+      try {
+         haveDefinition = getSwank().haveDefinitions(symbol, 
+         		getPackage(), TIMEOUT);
+      }
+      catch (SwankNotFoundException e) {
+         return;
+      }
 		
 		if ( !haveDefinition )
 		{
@@ -28,41 +35,59 @@ public class FindCallersAction extends LispAction {
 			return;
 		}
 		
-		getSwank().sendGetCallers(symbol, getPackage(), new SwankRunnable() {
-			public void run() {
-				LispNode guts = result.getf(":return").getf(":ok");
-				
-				ArrayList<String> optionNames = new ArrayList<String>(guts.params.size());
-				ArrayList<LispNode> optionData = new ArrayList<LispNode>(guts.params.size());
-				ArrayList<String> tips = new ArrayList<String>(guts.params.size());
-				for (LispNode gut: guts.params) {
-					if ( gut.params.size() == 2 && gut.params.get(1).get(0).value.equalsIgnoreCase(":location") ){
-						String name = gut.get(0).value;
-						String tip = gut.getf(":location").getf(":file").value;
-						optionNames.add(name);
-						optionData.add(gut);
-						tips.add(tip);				
-					} else {
-						for (int i = 1; i<gut.params.size(); ++i) {
-							LispNode possibility = gut.params.get(i);
-							String name = possibility.get(0).value;
-							String tip = possibility.getf(":location").getf(":file").value;
-							optionNames.add(name);
-							optionData.add(possibility);
-							tips.add(tip);
-						}
-					}
-				}
-				
-				if (optionNames.size() <= 0) {
-					XrefView.getXrefView().showResults("No calls to "+symbol+" were found.", null, null, null);
-					return;
-				} else {
-					XrefView.getXrefView().showResults("Callers of "+symbol+":", optionNames, optionData, tips);
-				}
-			}
-		
-		});
+      try {
+         getSwank().sendGetCallers(symbol, getPackage(), new SwankRunnable() {
+            public void run() {
+               LispNode guts = result.getf(":return").getf(":ok");
+
+               ArrayList<String> optionNames = new ArrayList<String>(guts.params.size());
+               ArrayList<LispNode> optionData = new ArrayList<LispNode>(guts.params.size());
+               ArrayList<String> tips = new ArrayList<String>(guts.params.size());
+               for (LispNode gut : guts.params) {
+                  if (gut.params.size() == 2 &&
+                           gut.params.get(1).get(0).value.equalsIgnoreCase(":location")) {
+                     String name = gut.get(0).value;
+                     String tip = gut.getf(":location").getf(":file").value;
+                     optionNames.add(name);
+                     optionData.add(gut);
+                     tips.add(tip);
+                  }
+                  else {
+                     for (int i = 1; i < gut.params.size(); ++i) {
+                        LispNode possibility = gut.params.get(i);
+                        String name = possibility.get(0).value;
+                        String tip = possibility.getf(":location")
+                                                .getf(":file").value;
+                        optionNames.add(name);
+                        optionData.add(possibility);
+                        tips.add(tip);
+                     }
+                  }
+               }
+
+               if (optionNames.size() <= 0) {
+                  XrefView.getXrefView().showResults("No calls to " + symbol +
+                                                              " were found.",
+                                                     null,
+                                                     null,
+                                                     null);
+                  return;
+               }
+               else {
+                  XrefView.getXrefView().showResults("Callers of " + symbol +
+                                                              ":",
+                                                     optionNames,
+                                                     optionData,
+                                                     tips);
+               }
+            }
+
+         });
+      }
+      catch (SwankNotFoundException e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
+      }
 	}
 
 }

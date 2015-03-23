@@ -1,6 +1,7 @@
 package jasko.tim.lisp.navigator;
 
 import jasko.tim.lisp.LispPlugin;
+import jasko.tim.lisp.SwankNotFoundException;
 import jasko.tim.lisp.swank.SwankInterface;
 
 import org.eclipse.core.resources.IFile;
@@ -29,8 +30,16 @@ public class LoadFileAction implements IActionDelegate {
 				String filePath = file.getLocation().toOSString().replace("\\", "\\\\");
 				String command = "(load \"" + filePath + "\")";
 			
-				SwankInterface swank = LispPlugin.getDefault().getSwank();
-				swank.sendEval(command, null);
+				SwankInterface swank;
+            try {
+               swank = LispPlugin.getDefault().getSwank();
+               swank.sendEval(command, null);
+
+            }
+            catch (SwankNotFoundException e) {
+               // TODO Auto-generated catch block
+               e.printStackTrace();
+            }
 			}
 		}
 	}
