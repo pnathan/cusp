@@ -176,7 +176,8 @@
     (funcall fn)))
 
 (defimplementation compute-backtrace (start end)
-  (subseq *stack-trace* start (min end (length *stack-trace*))))
+  (loop for f in (subseq *stack-trace* start (min end (length *stack-trace*)))
+	collect f))
 
 (defimplementation print-frame (frame stream)
   (format stream "~S" frame))
@@ -202,16 +203,12 @@
     (let ((cl::*compiler-environment* (get-frame-debug-info frame)))
       (eval form))))
 
-(defimplementation frame-catch-tags (index)
-  (declare (ignore index))
-  nil)
-
 (defimplementation frame-var-value (frame-number var)
   (let ((vars (frame-variables (elt *frame-trace* frame-number))))
     (when vars
       (second (elt vars var)))))
 
-(defimplementation frame-source-location-for-emacs (frame-number)
+(defimplementation frame-source-location (frame-number)
   (fspec-location (frame-function (elt *frame-trace* frame-number))))
 
 (defun break (&optional (format-control "Break") &rest format-arguments)
@@ -355,7 +352,7 @@
                                    (cond (*buffer-name*
                                           (make-location
                                            (list :buffer *buffer-name*)
-                                           (list :position *buffer-position*)))
+                                           (list :offset *buffer-position* 0)))
                                          (*compile-filename*
                                           (make-location
                                            (list :file *compile-filename*)
@@ -364,24 +361,27 @@
                                           (list :error "No location"))))))))
     (funcall fn)))
 
-(defimplementation swank-compile-file (*compile-filename* load-p
-				       external-format)
+(defimplementation swank-compile-file (input-file output-file 
+				       load-p external-format)
   (declare (ignore external-format))
   (with-compilation-hooks ()
-    (let ((*buffer-name* nil))
-      (compile-file *compile-filename*)
-      (when load-p
-        (load (compile-file-pathname *compile-filename*))))))
+    (let ((*buffer-name* nil)
+	  (*compile-filename* input-file))
+      (multiple-value-bind (output-file warnings? failure?)
+	  (compile-file input-file :output-file output-file)
+	(values output-file warnings?
+		(or failure? (and load-p (load output-file))))))))
 
-(defimplementation swank-compile-string (string &key buffer position directory
-                                                debug)
-  (declare (ignore directory debug))
+(defimplementation swank-compile-string (string &key buffer position filename
+					 policy)
+  (declare (ignore filename policy))
   (with-compilation-hooks ()
     (let ((*buffer-name* buffer)
           (*buffer-position* position)
           (*buffer-string* string))
       (funcall (compile nil (read-from-string
-                             (format nil "(~S () ~A)" 'lambda string)))))))
+                             (format nil "(~S () ~A)" 'lambda string))))
+      t)))
 
 ;;;; Inspecting
 

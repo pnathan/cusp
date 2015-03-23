@@ -84,7 +84,7 @@ public class NewLispFileWizard extends Wizard implements INewWizard {
 	 * the editor on the newly created file.
 	 */
 
-	private void doFinish(
+	public void doFinish(
 		String containerName,
 		String fileName,
 		IProgressMonitor monitor)
@@ -139,7 +139,7 @@ public class NewLispFileWizard extends Wizard implements INewWizard {
 		return new ByteArrayInputStream(contents.getBytes());
 	}
 
-	private void throwCoreException(String message) throws CoreException {
+	public static void throwCoreException(String message) throws CoreException {
 		IStatus status =
 			new Status(IStatus.ERROR, "jasko.tim.lisp", IStatus.OK, message, null);
 		throw new CoreException(status);

@@ -1,5 +1,7 @@
 package jasko.tim.lisp.preferences;
 
+import java.io.File;
+
 import org.eclipse.jface.preference.*;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -46,12 +48,30 @@ public class ImplementationsPreferencePage extends FieldEditorPreferencePage
 	 */
 	public void createFieldEditors() {
 		Composite parent = getFieldEditorParent();
+
+		addField(new StringFieldEditor(
+				PreferenceConstants.LISP_ARGUMENTS,
+				"Lisp Executable &Arguments:",
+				parent));
+	
+		StringFieldEditor ed = new StringFieldEditor(
+				PreferenceConstants.LISP_ENVIRONMENT,
+				"Lisp Executable &Environment:",
+				parent);
 		
-		addField(new BooleanFieldEditor(
+		String envToolTip = "Format: VAR1=val;VAR2=val2;";
+		ed.getLabelControl(parent).setToolTipText(envToolTip);
+		ed.getTextControl(parent).setToolTipText(envToolTip);
+		
+		addField(ed);
+	
+		
+		/*addField(new BooleanFieldEditor(
 					PreferenceConstants.USE_SITEWIDE_LISP,
 					"Use a lisp &sitewide installation (executable is on the path)",
-					parent));
+					parent));*/
 
+		
 		addField(new FileFieldEditor(PreferenceConstants.LISP_EXE, 
 				"&Lisp Executable:", parent));
 
@@ -59,6 +79,15 @@ public class ImplementationsPreferencePage extends FieldEditorPreferencePage
 				"&Initialization File:", parent));
 
 
+		RadioGroupFieldEditor lispType = new RadioGroupFieldEditor(PreferenceConstants.LISP_TYPE, "Lisp Type", 1, 
+				new String[][] {
+				  { "SBCL", PreferenceConstants.SBCL_LISP },
+				  { "Other",PreferenceConstants.OTHER_LISP}
+				},parent);	
+		addField(lispType);
+		
+		/////////////////
+		
 		RadioGroupFieldEditor compilations = new RadioGroupFieldEditor(PreferenceConstants.BUILD_TYPE, "How to handle compilation:", 1, 
 				new String[][] {
 				  { "Compile on Save (recommented)", PreferenceConstants.USE_AUTO_BUILD },
@@ -67,7 +96,7 @@ public class ImplementationsPreferencePage extends FieldEditorPreferencePage
 				  { "Slime Style Build", PreferenceConstants.USE_SLIME_BUILD } 
 				},parent);
 		compilations.getRadioBoxControl(parent)
-			.setToolTipText("- Comile on save: compiles only expressions changed by recent edits.\n" +
+			.setToolTipText("- Compile on save: compiles only expressions changed by recent edits.\n" +
 					"- Eclipse Autobuild: recompiles whole file on save.\n" +
 					"- Slime Style Build: manually select which expressions to compile.");
 		
@@ -94,13 +123,22 @@ public class ImplementationsPreferencePage extends FieldEditorPreferencePage
 		libManagerIndent.setLayout(new GridLayout(2, false));
 		StringFieldEditor strf = new StringFieldEditor(PreferenceConstants.SYSTEMS_PATH, 
 				"Path to libraries:", libManagerIndent);
+		StringFieldEditor sharedLibDir = new StringFieldEditor(PreferenceConstants.SYSTEMS_SHARED_PATH,"Path to Shared Libraries",libManagerIndent);
+		
 		String strfTipString = "Top levels. Cusp's library manager will search subdirectories.\n" +
 				"Separate directories by ;\nNote: Requires Lisp restart";
+		String sharedLibDirString = "Shared Lib Directory. Sets the path variable.\nCan nest up to 2 levels of directories.\nNote: Requires Swank Restart";
+		
 		strf.getLabelControl(libManagerIndent).setToolTipText(strfTipString);
-		strf.getTextControl(libManagerIndent).setToolTipText(strfTipString);		
+		strf.getTextControl(libManagerIndent).setToolTipText(strfTipString);	
+		
+		sharedLibDir.getLabelControl(libManagerIndent).setToolTipText(sharedLibDirString);
+		sharedLibDir.getTextControl(libManagerIndent).setToolTipText(sharedLibDirString);
+		
 		addField(strf);
 		
-        addField(strf);
+		addField(sharedLibDir);
+        //addField(strf);
         
         for (Control c : libManagerIndent.getChildren()) {
             GridData gd = new GridData(GridData.BEGINNING, GridData.CENTER, false, false, 1, 1);
@@ -123,7 +161,7 @@ public class ImplementationsPreferencePage extends FieldEditorPreferencePage
 	 */
 	public void init(IWorkbench workbench) {
 		setPreferenceStore(LispPlugin.getDefault().getPreferenceStore());
-		setDescription("Setup local Lisp implementation.");
+		setDescription("Setup Lisp Implementation.");
 	}
 
 

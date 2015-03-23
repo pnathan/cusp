@@ -61,7 +61,9 @@ public class Templater {
 				}
 				contents = contents.replace("${example-export}","#:main");
 				
-				if( LispPlugin.getDefault().getSwank().implementation.lispType().toLowerCase().contains("sbcl")){
+				if(
+					LispPlugin.getDefault().getSwank().implementation!=null&&
+					LispPlugin.getDefault().getSwank().implementation.lispType().toLowerCase().contains("sbcl")){
 					contents = contents.replace("${example-source}",
 							"(defun main ()\n"+
 							"  \"This function greets and returns 0.\n" +

@@ -5,9 +5,11 @@ import jasko.tim.lisp.editors.LispEditor;
 public class MacroExpandAllAction extends MacroExpandAction {
 	public MacroExpandAllAction() {
 		super();
+		super.all = true;
 	}
 	
 	public MacroExpandAllAction(LispEditor editor) {
-		super (editor, false);
+		super (editor);
+		super.all = true;
 	}
 }

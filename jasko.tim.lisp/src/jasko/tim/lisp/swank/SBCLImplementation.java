@@ -116,9 +116,7 @@ public class SBCLImplementation extends LispImplementation {
 						return sbclFolder;
 					}		    	
 			    }
-			    
-				System.out.println(">>> Did not find sbcl folder");
-				return null;				
+			    return sbclFolder; //LispImplementation.findFolder("sbcl");	
 			}			
 		}
 	}
@@ -128,6 +126,12 @@ public class SBCLImplementation extends LispImplementation {
 	 *  
 	 * @return SBCL implementation found on the system, or null if none is found
 	 */
+	static public SBCLImplementation makeImplementation (String executable)
+	{
+		return new SBCLImplementation(new File(executable),
+				new File(executable).getParentFile());
+	}
+	
 	static public SBCLImplementation findImplementation()
 	{
 		SBCLImplementation implementation = null;
@@ -179,12 +183,18 @@ public class SBCLImplementation extends LispImplementation {
 
 	public boolean isValid() { return executable != null && path != null; }
 	
-	public Process start(String loadPath, int port) throws IOException
+	public void setEnvironment() {
+		pb.environment().put("SBCL_HOME", path.getPath());
+		pb.directory(new File(executable.getParent()));
+		super.setEnvironment();
+	}
+	
+	public ProcessBuilder start(String loadPath, int port) throws IOException
 	{
 		System.out.println("start");
 		
 		if (isValid()){
-			ProcessBuilder pb;
+			//ProcessBuilder pb;
 			String[] commandLine = new String[] {
 					executable.getPath()
 					//,"--dynamic-space-size", "50000" // simulate the error some windows users get
@@ -193,8 +203,7 @@ public class SBCLImplementation extends LispImplementation {
 			
 			pb = new ProcessBuilder(commandLine);
 			this.loadPath = loadPath;
-			pb.environment().put("SBCL_HOME", path.getPath());
-			return pb.start();
+			return pb;		
 		}
 		return null;
 	}
@@ -358,7 +367,7 @@ public class SBCLImplementation extends LispImplementation {
 		return true;
 	}
 	
-	public Process startHarder(String loadPath) throws IOException {
+	/*public Process startHarder(String loadPath) throws IOException {
 		System.out.println("startHarder");
 		ProcessBuilder pb;
 		String[] commandLine = new String[] {
@@ -371,9 +380,12 @@ public class SBCLImplementation extends LispImplementation {
 		this.loadPath = loadPath;
 		pb.environment().put("SBCL_HOME", path.getPath());
 		return pb.start();
-	}
+	}*/
 	
 	public String getLoadSwankCommand() {
 		return "(load \"" + this.loadPath.replace("\\", "\\\\") + "\")\n";
 	}
+
+	
+	
 }

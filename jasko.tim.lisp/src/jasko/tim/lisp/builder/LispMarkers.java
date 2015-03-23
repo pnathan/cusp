@@ -146,12 +146,30 @@ public class LispMarkers {
 		}
 	}
 	
+	
 	public static void addPackageMarker(IFile file, int offset, int endOffset, 
 			int lineNum, String pkg){
-		addMarker(file,offset,endOffset - offset + 1, lineNum,
-				"Package "+pkg+
-				" not loaded. \nRight click on corresponding .asd file and select\nLoad Package",
-				IMarker.SEVERITY_ERROR,LISP_PACKAGE_NOT_LOADED_MARKER);
+		String errorMessage = "Package "+pkg+
+		" not loaded. \nRight click on corresponding .asd file and select\nLoad Package";
+		//Below prevents adding of same error message to marker, which gets annoying after
+		//10 error messages rage down your screen when you hover the mouse over error marker!
+		boolean addMarker = true;
+		try {
+			for(IMarker m: file.findMarkers(LISP_PACKAGE_NOT_LOADED_MARKER, 
+					false, IResource.DEPTH_INFINITE)) {
+				if (m.getAttribute(IMarker.MESSAGE).equals(errorMessage)) {
+					addMarker = false; break;
+				}
+			}
+		} catch (CoreException e) {
+			// TODO Auto-generated catch block
+			 addMarker = false; e.printStackTrace();
+		}
+		//
+		if (addMarker) {
+			addMarker(file,offset,endOffset - offset + 1, lineNum, errorMessage,
+					IMarker.SEVERITY_ERROR,LISP_PACKAGE_NOT_LOADED_MARKER);
+		}
 	}
 
 	// multiple function definition marker
@@ -210,7 +228,9 @@ public class LispMarkers {
 			return;
 		}
 		deleteBreakpointMarkers(file);
-		String[] markersData = doc.get().split(BreakpointAction.splitregx);
+		if (!doc.get().equals("")) {
+			String[] markersData = doc.get().split(BreakpointAction.splitregx);
+		
 		int offset = 0;
 		int len = BreakpointAction.start.length();
 		for( String line : markersData ){
@@ -235,6 +255,7 @@ public class LispMarkers {
 				addBreakpointMarker(file, range[0], range[1], lineNum);
 			}
 			offset += line.length() + len;
+		}
 		}
 	}
 	
@@ -265,6 +286,7 @@ public class LispMarkers {
 			return;
 		}
 		deleteWatchMarkers(file);
+		if (!doc.get().equals("")) {
 		String[] markersData = doc.get().split(WatchAction.splitregx);
 		int offset = 0;
 		int len = WatchAction.start.length();
@@ -290,6 +312,7 @@ public class LispMarkers {
 				addWatchMarker(file, range[0], range[1], lineNum);
 			}
 			offset += line.length() + len;
+		}
 		}
 	}
 	
@@ -324,16 +347,19 @@ public class LispMarkers {
 			return;
 		}
 		deleteTasks(file);
-		String[] lines = doc.get().split("\n");
-		int numLines = 0;
-		for( String line : lines ){
-			if ( line.matches(".*;.*TODO:.*\\s*") ){
-				String[] strs = line.trim().split("TODO:");
-				for ( int i = 1; i < strs.length; ++i ) {
-					addTask(file,"TODO:" + strs[i],numLines+1);
+		if (!doc.get().equals("")) {
+			String[] lines = doc.get().split("\n");
+
+			int numLines = 0;
+			for( String line : lines ){
+				if ( line.matches(".*;.*TODO:.*\\s*") ){
+					String[] strs = line.trim().split("TODO:");
+					for ( int i = 1; i < strs.length; ++i ) {
+						addTask(file,"TODO:" + strs[i],numLines+1);
+					}
 				}
+				++numLines;	
 			}
-			++numLines;	
 		}
 	}
 

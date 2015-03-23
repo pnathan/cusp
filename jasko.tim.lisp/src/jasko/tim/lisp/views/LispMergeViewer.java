@@ -18,7 +18,7 @@ public class LispMergeViewer extends TextMergeViewer {
 	public LispMergeViewer(final Composite parent, final int styles,
 			final CompareConfiguration mp) {
 		super(parent, styles, mp);
-	}
+	 }
 	
 	protected void configureTextViewer(TextViewer textViewer){
 	      if(textViewer instanceof SourceViewer) {

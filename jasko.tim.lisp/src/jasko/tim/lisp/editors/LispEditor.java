@@ -2,44 +2,75 @@ package jasko.tim.lisp.editors;
 
 // import jasko.tim.lisp.ColorManager;
 import jasko.tim.lisp.LispPlugin;
-// import jasko.tim.lisp.ColorManager.ColorChangeEvent;
+import jasko.tim.lisp.builder.LispBuilder;
+import jasko.tim.lisp.builder.LispMarkers;
+import jasko.tim.lisp.editors.LispSelectionMixin.SelectionPosition;
 import jasko.tim.lisp.editors.assist.LispInformationControlManager;
 import jasko.tim.lisp.editors.outline.LispOutlinePage;
 import jasko.tim.lisp.preferences.PreferenceConstants;
 import jasko.tim.lisp.swank.LispParser;
 import jasko.tim.lisp.swank.SwankInterface;
-import jasko.tim.lisp.util.*;
-import jasko.tim.lisp.builder.*;
+import jasko.tim.lisp.util.LispUtil;
+import jasko.tim.lisp.util.TopLevelItem;
+import jasko.tim.lisp.util.TopLevelItemSort;
 
-import java.util.Iterator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EmptyStackException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Stack;
 
-import org.eclipse.core.resources.*;
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IResource;
+import org.eclipse.core.resources.IWorkspaceRoot;
+import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.Path;
-import org.eclipse.jface.text.*;
-import org.eclipse.jface.text.source.*;
+import org.eclipse.jface.text.BadLocationException;
+import org.eclipse.jface.text.BadPositionCategoryException;
+import org.eclipse.jface.text.DefaultPositionUpdater;
+import org.eclipse.jface.text.DocumentEvent;
+import org.eclipse.jface.text.IAutoEditStrategy;
+import org.eclipse.jface.text.IDocument;
+import org.eclipse.jface.text.IDocumentListener;
+import org.eclipse.jface.text.ITextSelection;
+import org.eclipse.jface.text.ITextViewerExtension7;
+import org.eclipse.jface.text.Position;
+import org.eclipse.jface.text.source.Annotation;
+import org.eclipse.jface.text.source.ISourceViewer;
+import org.eclipse.jface.text.source.IVerticalRuler;
+import org.eclipse.jface.text.source.SourceViewer;
 import org.eclipse.jface.text.source.projection.ProjectionAnnotation;
 import org.eclipse.jface.text.source.projection.ProjectionAnnotationModel;
 import org.eclipse.jface.text.source.projection.ProjectionSupport;
 import org.eclipse.jface.text.source.projection.ProjectionViewer;
-import org.eclipse.jface.text.DefaultPositionUpdater;
-import org.eclipse.jface.text.IDocumentListener;
-import org.eclipse.jface.text.source.ISourceViewer;
 import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.ui.*;
+import org.eclipse.ui.IEditorInput;
+import org.eclipse.ui.IEditorPart;
+import org.eclipse.ui.IEditorSite;
+import org.eclipse.ui.IFileEditorInput;
+import org.eclipse.ui.IPageLayout;
+import org.eclipse.ui.IViewPart;
+import org.eclipse.ui.IViewReference;
+import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.PartInitException;
+import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.editors.text.TextEditor;
 import org.eclipse.ui.ide.IDE;
+
 import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 
-public class LispEditor extends TextEditor implements ILispEditor {
+public class LispEditor extends TextEditor implements ILispEditor,ILispSelection,ITextViewerExtension7{
+	LispSelectionMixin mixin = new LispSelectionMixin(this);
+	
 	/** The ID of this editor as defined in plugin.xml */
 	public static final String EDITOR_ID = "jasko.tim.lisp.editors.LispEditor";
     /** The ID of the editor context menu */
@@ -47,16 +78,17 @@ public class LispEditor extends TextEditor implements ILispEditor {
     /** The ID of the editor ruler context menu */
     public static final String RULER_CONTEXT = EDITOR_CONTEXT + ".ruler";
 
-	
-	
 	private LispOutlinePage outline;
+	public LispOutlinePage getOutlinePage () {
+		return outline;
+	}
 	private ArrayList<TopLevelItem> topForms;
 	// private ColorManager.ChangeEventListener colorPrefChangeListener;
     private final LispConfiguration config = 
     	new LispConfiguration(this, LispPlugin.getDefault().getColorManager());
     
     private final CurrentExpressionHighlightingListener highlighter = 
-    	new CurrentExpressionHighlightingListener();
+    	new CurrentExpressionHighlightingListener(this);
     
     private final String CHANGED_POS_FOR_COMPILE = 
     	"jasko.tim.lisp.doc.change_for_compile";
@@ -65,21 +97,89 @@ public class LispEditor extends TextEditor implements ILispEditor {
     private final String CHANGED_POS_FOR_OUTLINE = 
     	"jasko.tim.lisp.doc.change_for_outline";
 
-    private final String TOP_LVL_POS = 
+    public final String TOP_LVL_POS = 
     	"jasko.tim.lisp.doc.top_lvl_pos";
+    public final static String PACKAGE_POS = "jasko.tim.lisp.doc.package_pos";
     
-    protected void initializeEditor() {
+    public CurrentExpressionHighlightingListener getHighlighter () {
+    	return highlighter;
+    }
+
+  
+
+    
+    public ISourceViewer getViewer () {
+    	return getSourceViewer();
+    }
+    
+    protected void initializeEditor() {	
         super.initializeEditor();
         setEditorContextMenuId(EDITOR_CONTEXT);
         setRulerContextMenuId(RULER_CONTEXT);
+      
     }
-    
-    public void addOutlinePosition(Position pos){
-		IDocument doc = getDocument();
-		if( null == doc ){
-			return;
+  //copied this 
+	public static IViewPart getView(String id) {
+		IViewReference viewReferences[] = PlatformUI.getWorkbench()
+				.getActiveWorkbenchWindow().getActivePage().getViewReferences();
+		for (int i = 0; i < viewReferences.length; i++) {
+			if (id.equals(viewReferences[i].getId())) {
+				return viewReferences[i].getView(false);
+			}
 		}
+		return null;
+	}
+
+
+public LispOutlinePage getOutline (boolean visible) {
+	if (outline==null)
+		createOutline(visible);
+	return outline;
+}
+
+ public void createOutline (boolean visible) {
+	try {
+		this.getSite().getPage().showView(IPageLayout.ID_OUTLINE);
+		if (!visible) 
+			this.getSite().getPage().hideView(getView(IPageLayout.ID_OUTLINE));		
+	} catch (PartInitException e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	} 
+	 
+ }
+    
+    LinkedHashMap<Position,TopLevelItem> packages = new LinkedHashMap<Position,TopLevelItem>();
+    
+   public LinkedHashMap<Position,TopLevelItem> getPackages () {
+	   return packages;
+   }
+   
+    public TopLevelItem addPackagePosition (TopLevelItem item) {
+    	return packages.put(new Position(item.offset+1), item);
+    }
+    public boolean isPackagePosition(Position pos) {
+    	return packages.containsKey(pos);
+    }
+    public TopLevelItem removePackagePosition(Position pos) {
+    	return packages.remove(pos);
+    }
+
+    public static boolean isPackageItem (TopLevelItem itm) {
+    	return itm.type.equalsIgnoreCase("in-package");
+    }
+    public static boolean isPackageName (String name) {
+    	return name.equalsIgnoreCase("in-package");
+    }
+    public void addOutlinePosition(TopLevelItem item, Position pos){
+		IDocument doc = getDocument();
+	
     	try{
+    		
+    		if (item.type.trim().equalsIgnoreCase("in-package")) {
+    			packages.put(pos,item);
+    			doc.addPosition(PACKAGE_POS,pos);
+    		}
     		doc.addPosition(TOP_LVL_POS, pos);
     	} catch ( Exception e ){
     		e.printStackTrace();
@@ -93,7 +193,10 @@ public class LispEditor extends TextEditor implements ILispEditor {
 		}
 		try{
 			doc.removePositionCategory(TOP_LVL_POS);
+			doc.removePositionCategory(PACKAGE_POS);
+			packages.clear();
 			doc.addPositionCategory(TOP_LVL_POS);
+			doc.addPositionCategory(PACKAGE_POS);
 		} catch ( BadPositionCategoryException e) {
 			e.printStackTrace();
 		}    	
@@ -106,6 +209,7 @@ public class LispEditor extends TextEditor implements ILispEditor {
 			return null;
 		}
 		try{
+			
 			pos = doc.getPositions(CHANGED_POS_FOR_OUTLINE);
 			doc.removePositionCategory(CHANGED_POS_FOR_OUTLINE);
 		} catch ( BadPositionCategoryException e) {
@@ -116,8 +220,23 @@ public class LispEditor extends TextEditor implements ILispEditor {
 		return pos;
     }
     
+    public void setOffset(int offset) {
+   
+    	setHighlightRange(offset,1,true);   	
+    }
+
+    
+    public int getOffset() {
+		ITextSelection ts = (ITextSelection)getSelectionProvider().getSelection();
+		int offset = ts.getOffset();
+		return offset;
+	}
+
+    
     public void updateOutline(){
-    	outline.updateOutline();
+    	//TODO: Gorsal - find actual reason for NullPointerException!
+    	if (outline!=null) 
+    		outline.updateOutline();
     }
 
     /**
@@ -189,6 +308,7 @@ public class LispEditor extends TextEditor implements ILispEditor {
 	 * @param snippet
 	 * @param symbol
 	 */
+	@SuppressWarnings("restriction")
 	public static void jumpToDefinition(String filePath, int position, 
 			String snippet, String symbol) {
 		System.out.println("*jump: " + filePath + ":" + position);
@@ -248,7 +368,7 @@ public class LispEditor extends TextEditor implements ILispEditor {
 					// skip comments or strings
 					int iters = 0;
 					int offset = position;
-					while( offset >= 0 && offset < doc.getLength() && 
+					while(offset >= 0 && offset < doc.getLength() && 
 							(doc.getPartition(offset)
 								     .getType().equals(LispPartitionScanner.LISP_COMMENT)
 								     || doc.getPartition(offset)
@@ -267,6 +387,8 @@ public class LispEditor extends TextEditor implements ILispEditor {
 						editor2.selectAndReveal(position, 0);
 					}
 				}
+				
+				
 			} catch (Exception e) {
 				e.printStackTrace();
 				System.out.println("**jump fallback 5");
@@ -275,6 +397,7 @@ public class LispEditor extends TextEditor implements ILispEditor {
 				editor2.selectAndReveal(position, 0);
 			}
 			System.out.println("**** jump done");
+	
 			
 		}
 	}
@@ -301,9 +424,21 @@ public class LispEditor extends TextEditor implements ILispEditor {
 		}
 	}
 	
+	
+	public void init(final IEditorSite site, final IEditorInput input) throws PartInitException {
+		super.init(site, input);
+	
+	}
+	
+	
+
+	
+	
 	public void createPartControl(Composite parent) {
 		super.createPartControl(parent);
-		
+		//due to an eclipse bug, a tab to space converter is automatically created. This uninstalls it
+		//TODO: fix eclipse bug???
+		super.uninstallTabsToSpacesConverter();
 		ProjectionViewer viewer = (ProjectionViewer) getSourceViewer();
 		projectionSupport = new ProjectionSupport(viewer, getAnnotationAccess(),
 				getSharedColors());
@@ -319,14 +454,22 @@ public class LispEditor extends TextEditor implements ILispEditor {
 		licm = new LispInformationControlManager(this);
 		licm.install(this.getSourceViewer().getTextWidget());
 
+		
 		IDocument doc = getDocument();
+		if (doc==null) {
+			this.close(false);
+			parent.dispose();
+			return;
+		}
 		if(null != doc){
 			doc.addPositionCategory(CHANGED_POS_FOR_COMPILE);
 			doc.addPositionUpdater(new DefaultPositionUpdater(CHANGED_POS_FOR_COMPILE));
 			doc.addPositionCategory(CHANGED_POS_FOR_OUTLINE);
 			doc.addPositionUpdater(new DefaultPositionUpdater(CHANGED_POS_FOR_OUTLINE));
 			doc.addPositionCategory(TOP_LVL_POS);
+			doc.addPositionCategory(PACKAGE_POS);
 			doc.addPositionUpdater(new DefaultPositionUpdater(TOP_LVL_POS));
+			doc.addPositionUpdater(new DefaultPositionUpdater(PACKAGE_POS));
 			doc.addDocumentListener(new changesListener());
 			useAutoBuild = LispPlugin.getDefault().getPreferenceStore()
 			  .getString(PreferenceConstants.BUILD_TYPE)
@@ -377,9 +520,8 @@ public class LispEditor extends TextEditor implements ILispEditor {
 		if (LispPlugin.getDefault().getPreferenceStore()
 				.getString(PreferenceConstants.BUILD_TYPE)
 				  .equals(PreferenceConstants.USE_SLIME_BUILD)) { 
-			LispBuilder.checkLisp(getIFile());
+			LispBuilder.checkLispWithDoc(getIFile(),getDocument());
 		}
-
 		LispMarkers.updateTasks(getIFile(), getDocument());
 		LispMarkers.updateBreakpointMarkers(getIFile(), getDocument());
 		LispMarkers.updateWatchMarkers(getIFile(), getDocument());
@@ -417,7 +559,7 @@ public class LispEditor extends TextEditor implements ILispEditor {
 
 	private void compileOnSave() {
 		IDocument doc = getDocument();
-		if( true /*LispBuilder.checkLisp(getIFile()) */){
+		if( true /*LispBuilder.checkLisp(getIFile()) */&&!doc.get().equals("")){
 			SwankInterface swank = LispPlugin.getDefault().getSwank(); 
 			ArrayList<TopLevelItem> newForms = 
 				LispUtil.getTopLevelItems(LispParser.parse(doc.get() + "\n)"),
@@ -435,6 +577,7 @@ public class LispEditor extends TextEditor implements ILispEditor {
 				pos = null;
 			}
 			if( pos == null || pos.length == 0 ){ //compile whole file
+				//TODO: Change to Good CheckLisp
 				if(LispBuilder.checkLisp(getIFile())){
 					LispBuilder.compileFile(getIFile(),false);					
 				}
@@ -475,7 +618,8 @@ public class LispEditor extends TextEditor implements ILispEditor {
 					// should compile rest of the file
 					try{
 						sexp = doc.get(offset,n-offset);
-						if(LispBuilder.checkLisp(getIFile())){
+						//TODO: Need to only specify offset for checkLispWithDoc?
+						if(LispBuilder.checkLispWithDoc(getIFile(),doc)){
 							LispBuilder.compileFilePart(getIFile(), sexp, offset);
 						}
 						doc.removePositionCategory(CHANGED_POS_FOR_COMPILE);
@@ -485,7 +629,8 @@ public class LispEditor extends TextEditor implements ILispEditor {
 					}
 					break;
 				} else if ( sexp != null && sexp != "" ){
-					if(LispBuilder.checkLisp(getIFile(), offset, sexp.length())){
+					//TODO: OBVIOUSLY WE SHOULD PARSE ONLY THE SEXP WHICH HAVE CHANGED!!!! DUR!
+					if(LispBuilder.checkLispWithDoc(getIFile(), doc)) { //offset, sexp.length())){
 						LispBuilder.compileFilePart(getIFile(), sexp, offset);						
 					}
 				}
@@ -501,7 +646,7 @@ public class LispEditor extends TextEditor implements ILispEditor {
 		ArrayList<Integer> sexpOffsets = new ArrayList<Integer>();
 		ArrayList<Integer> sexpOffsetsEnd = new ArrayList<Integer>();
 		for( Position p: pos){
-			for( int i = p.offset; i <= p.offset + p.length; ++i){
+			for( int i = p.offset; i <= p.offset + p.length; ++i){ 
 				if( i < range[0] || i > range[0] + range[1] ){ //not in previous range
 					int ii = Collections.binarySearch(sexpOffsets, i);
 					if( ii >= 0 ){
@@ -531,11 +676,12 @@ public class LispEditor extends TextEditor implements ILispEditor {
 											}
 										}
 										int end = 0;
-										for( end = i - 1; end < getDocument().getLength(); ++end ){
-											if( getDocument().getChar(end) == '('){
-												break;
+										if (i>0)
+											for( end = i - 1; end < getDocument().getLength(); ++end ){
+												if( getDocument().getChar(end) == '('){
+													break;
+												}
 											}
-										}
 										if( end > start ){
 											range[0] = start;
 											range[1] = end - start + 1;
@@ -741,15 +887,20 @@ public class LispEditor extends TextEditor implements ILispEditor {
 	
     public void dispose () {
         super.dispose();
-        highlighter.uninstall(getSourceViewer());
+        ISourceViewer viewer = getSourceViewer();
+        if (viewer!=null) {
+        	highlighter.uninstall(viewer);
+        }
     }
     
 	/**
 	 * Seriously, couldn't they have made this a little easier to get at?
 	 */
-	public IDocument getDocument() {
+
+	public IDocument getDocument () {	 
 		return getDocumentProvider().getDocument(getEditorInput());
 	}
+
 	
 	
 	/**
@@ -780,4 +931,42 @@ public class LispEditor extends TextEditor implements ILispEditor {
 	public StyledText getTextWidget() {
 		return this.getSourceViewer().getTextWidget();
 	}
+
+
+
+	public void setTabsToSpacesConverter(IAutoEditStrategy converter) {
+		// TODO Auto-generated method stub
+		
+	}
+
+
+
+
+	public void clearHistory() {
+		// TODO Auto-generated method stub
+		mixin.clearHistory();
+	}
+
+	public void flagSelectionAction() {
+		// TODO Auto-generated method stub
+		mixin.flagSelectionAction();
+	}
+
+	public Integer[] peekHistory() {
+		return mixin.peekHistory();
+	}
+
+	public void popHistory() {
+		mixin.popHistory();
+	}
+
+	public boolean selectionActionOccured() {
+		return mixin.selectionActionOccured();
+	}
+
+	public void addHistory(SelectionPosition pos) {
+		mixin.addHistory(pos);
+	}
+
+	
 }

@@ -23,6 +23,7 @@ public class LoadProjectAction implements IActionDelegate {
 	}
 
 	public void run(IAction action) {
+	/*	if (!LispPlugin.isDebugActive()) {*/
 		if (selection != null && selection.isEmpty() == false 
 				&& selection instanceof IStructuredSelection) {
 			IStructuredSelection ssel = (IStructuredSelection) selection;
@@ -62,6 +63,12 @@ public class LoadProjectAction implements IActionDelegate {
 				}
 			}
 		}
+	/*	
+		} else {
+			MessageBox box = new MessageBox(LispPlugin.getActiveShell(),SWT.OK|SWT.CANCEL|SWT.ERROR);
+			box.setText("Can't load a project while debug view is active");
+			box.open();
+		}*/
 	}
 
 	public IWorkbench getWorkbench() {

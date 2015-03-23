@@ -17,9 +17,13 @@
 ;;   * Adding new commands, keybindings, menu items
 ;;   * Making things clickable that would otherwise be just plain text
 
+(require 'slime-repl)
+(slime-repl-init)
+
 ;; Better arglist display, can be turned off by customization.
-(require 'slime-autodoc)
-(slime-autodoc-init)
+(unless (featurep 'xemacs)
+  (require 'slime-autodoc)
+  (slime-autodoc-init))
 
 ;; Adds new commands and installs compound-prefix-completion as
 ;; default completion command.  Behaves similar to standard Emacs
@@ -78,5 +82,9 @@
 ;; via C-c x.
 (require 'slime-package-fu)
 (slime-package-fu-init)
+
+;; Fontify with-foo and do-foo like standard macros.
+(require 'slime-fontifying-fu)
+(slime-fontifying-fu-init)
 
 (provide 'slime-fancy)

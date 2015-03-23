@@ -19,7 +19,7 @@ public class CustomAutoEdit implements IAutoEditStrategy {
 	private static String CARET_CHAR = "|";
 
 	private AutoEditData tree;
-	
+			
 	public class AutoEditData{
 		public String replace = null;
 		public int caretMove = 0;

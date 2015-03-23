@@ -227,8 +227,9 @@ public class RemoteImplementation extends LispImplementation {
 		};
 
 	};
-	
-	public Process start(String loadPath, int port) throws IOException {
+
+
+	public Process startLisp(String loadPath, int port) throws IOException {
 		if (isValid()) {
 			IPreferenceStore prefStore = LispPlugin.getDefault().getPreferenceStore();
 			
@@ -337,6 +338,14 @@ public class RemoteImplementation extends LispImplementation {
 		} else {
 			return filePath;
 		}
+	}
+
+
+	@Override
+	public ProcessBuilder start(String loadPath, int swankPort)
+			throws IOException {
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 }

@@ -38,7 +38,8 @@ public class ReplHistory extends SourceViewer
     private boolean underlineInspectables;
 	
 	public ReplHistory (Composite parent) {
-		super(parent, new VerticalRuler(10), SWT.V_SCROLL | SWT.MULTI | SWT.LEFT | SWT.BORDER);
+		//EDIT: ADDED SWT.H_SCROLL
+		super(parent, new VerticalRuler(10), SWT.V_SCROLL |SWT.H_SCROLL| SWT.MULTI | SWT.LEFT | SWT.BORDER);
 		
 		setEditable(false);
 		//configure(new LispConfiguration(null, LispPlugin.getDefault().getColorManager()));
@@ -139,6 +140,9 @@ public class ReplHistory extends SourceViewer
 			}
 			//doc.replace(doc.getLength(), 0, text);
 		} catch (BadLocationException e) {
+			e.printStackTrace();
+		} catch (NullPointerException e) {
+			//TODO: Gorsal - find reason for null pointer exception!
 			e.printStackTrace();
 		}
 	}

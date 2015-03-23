@@ -38,7 +38,7 @@ public class FindDefinitionAction extends LispAction {
         editor = (ILispEditor)targetEditor;
 		shell = null;
 		if( editor == null ){
-			shell = editor.getTextWidget().getShell();
+			//shell = editor.getTextWidget().getShell();
 		} else {
 			shell = PlatformUI.getWorkbench().getDisplay().getActiveShell();
 		}

@@ -5,8 +5,6 @@ import jasko.tim.lisp.preferences.PreferenceConstants;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
-
 import org.eclipse.jface.preference.IPreferenceStore;
 
 /**
@@ -23,10 +21,25 @@ public class SiteWideImplementation extends LispImplementation {
 	/**
 	 * @return Lisp implementation found in the preferences, or null if none is found
 	 */
-	static public SiteWideImplementation findImplementation() {
+	static public LispImplementation findImplementation() {
+		System.out.println("SiteWideImplementation: Searching for Implementation");
+		String lispType = LispPlugin.getDefault().getPreferenceStore().getString(PreferenceConstants.LISP_TYPE);
 		IPreferenceStore prefStore = LispPlugin.getDefault().getPreferenceStore();
 		String executable = prefStore.getString(PreferenceConstants.LISP_EXE);
-		return new SiteWideImplementation(executable);
+		System.out.println("Lisp Executable is "+executable);
+		if (executable.trim()!="") {
+			LispImplementation impl = null;
+			if (lispType==PreferenceConstants.SBCL_LISP){
+				System.out.println("Attempting to find SBCL lisp"+lispType);
+				impl = SBCLImplementation.makeImplementation(executable);
+			}
+			if (impl==null) {
+				System.out.println("Attempting to find a SiteWideImplementation"+lispType);
+				return new SiteWideImplementation(executable);
+			}	
+			return impl;
+		}
+		return null;
 	}
 
 	
@@ -45,20 +58,20 @@ public class SiteWideImplementation extends LispImplementation {
 		return executable != null; 
 	}
 	
-	public Process start(String loadPath, int port) throws IOException {
+	public ProcessBuilder start(String loadPath, int port) throws IOException {
 		if (isValid()) {
 			if (!executable.exists()) {
 				throw new IllegalArgumentException("Executable file does not exist :'" + executable + "'");
 			}
-			ProcessBuilder pb;
 			String[] commandLine = new String[] {
-				executable.getPath(),
+				executable.getPath()
 				//"--load", loadPath
 			};
-			
+		
 			pb = new ProcessBuilder(commandLine);
+			pb.directory(new File(executable.getParent()));
 			this.loadPath = loadPath;
-			return pb.start();
+			return pb;
 		}
 		return null;
 	}

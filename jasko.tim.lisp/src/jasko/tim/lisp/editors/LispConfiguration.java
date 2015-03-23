@@ -40,7 +40,7 @@ public class LispConfiguration extends TextSourceViewerConfiguration {
 	protected ColorManager colorManager;
 	protected ContentAssistant ca;
 	protected ILispEditor editor;
-
+ 
 	public ITextDoubleClickStrategy getDoubleClickStrategy(
 			ISourceViewer sourceViewer,
 			String contentType) {
@@ -71,6 +71,7 @@ public class LispConfiguration extends TextSourceViewerConfiguration {
 
     public void stopContentAssistant(){
     	ca.enableAutoActivation(false);
+    	
     }
     
     /* returns to state defined in AUTO_POPUP_COMPLETIONS) */
@@ -154,7 +155,8 @@ public class LispConfiguration extends TextSourceViewerConfiguration {
 			IDocument.DEFAULT_CONTENT_TYPE,
 			LispPartitionScanner.LISP_COMMENT,
 			LispPartitionScanner.LISP_STRING,
-			LispPartitionScanner.LISP_CHARACTER
+			LispPartitionScanner.LISP_CHARACTER,
+			LispPartitionScanner.LISP_SPECIAL_CHARACTER
 			};
 	}
 
@@ -168,18 +170,21 @@ public class LispConfiguration extends TextSourceViewerConfiguration {
 		}
 		return tagScanner;
 	}
-
+	
+	
 	public IPresentationReconciler getPresentationReconciler(ISourceViewer sourceViewer) {
 		//Set up the parentheses matching while we're here
-		ParenMatcher pm = new ParenMatcher();
+
+     	ParenMatcher pm = new ParenMatcher();
 		MatchingCharacterPainter painter = new MatchingCharacterPainter(
-				sourceViewer, pm);
+ 			sourceViewer, pm);
+		
 		pm.setPainter(painter);
 		//painter.setColor(Display.getDefault().getSystemColor(SWT.COLOR_DARK_GRAY));
 		ITextViewerExtension2 extension = (ITextViewerExtension2)sourceViewer;
 		extension.addPainter(painter);
 		
-		
+	 	
 		PresentationReconciler reconciler = new PresentationReconciler();
 
 		DefaultDamagerRepairer dr =
@@ -197,7 +202,7 @@ public class LispConfiguration extends TextSourceViewerConfiguration {
 		NonRuleBasedDamagerRepairer ndr3 =
 			new NonRuleBasedDamagerRepairer(
 				new TextAttribute(
-					colorManager.getColor(ColorManager.TokenType.STRING)));
+					colorManager.getColor(ColorManager.TokenType.DEFAULT)));
 		reconciler.setDamager(ndr3, LispPartitionScanner.LISP_CHARACTER);
 		reconciler.setRepairer(ndr3, LispPartitionScanner.LISP_CHARACTER);
 		

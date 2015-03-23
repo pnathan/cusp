@@ -58,15 +58,16 @@ public class AllegroImplementation extends LispImplementation {
 	 * Attempts to find the path of the implementation on this computer.
 	 * @return the directory of the lisp implementation or null if none is found
 	 */
-	static protected File findFolder()
+	static   File findFolder()
 	{
 		File foundPath = null;
 		String pluginDir = LispPlugin.getDefault().getPluginPath();
 		String lispPath = pluginDir + "acl80/";
 		
 		File dir = new File(lispPath);
-		if (dir.exists())
+		if (dir.exists()) {
 			foundPath = dir;
+		} 
 		return foundPath;
 	}
 	
@@ -110,7 +111,7 @@ public class AllegroImplementation extends LispImplementation {
 	
 	public boolean isValid() { return executable != null && path != null; }
 	
-	public Process start(String loadPath, int port) throws IOException
+	public ProcessBuilder start(String loadPath, int port) throws IOException
 	{
 		if (isValid())
 		{
@@ -120,8 +121,9 @@ public class AllegroImplementation extends LispImplementation {
 
 			ProcessBuilder pb = new ProcessBuilder(commandLine);
 			this.loadPath = loadPath;
+			pb.directory(new File(executable.getParent()));
 			
-			return pb.start();
+			return pb;
 		}
 		else
 		{

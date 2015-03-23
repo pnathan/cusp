@@ -36,11 +36,11 @@ public class LispPreferencePage
 	 */
 	public void createFieldEditors() {
 		
-		addField(
+		/*addField(
 				new BooleanFieldEditor(
 					PreferenceConstants.USE_SITEWIDE_LISP,
 					"Use a lisp &sitewide installation (executable is on the path)",
-					getFieldEditorParent()));
+					getFieldEditorParent()));*/
 
 		addField(new FileFieldEditor(PreferenceConstants.LISP_EXE, 
 				"&Lisp Executable:", getFieldEditorParent()));

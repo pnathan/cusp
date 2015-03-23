@@ -26,6 +26,8 @@ public class LispDoubleClickStrategy implements ITextDoubleClickStrategy {
 	}
 
 	private void selectRange(int[] range) {
-		fText.setSelectedRange(range[0], range[1]);
+		//TODO: Gorsal: Really fix source of this error!
+		if (fText!=null&&range!=null)
+			fText.setSelectedRange(range[0], range[1]);
 	}
 }

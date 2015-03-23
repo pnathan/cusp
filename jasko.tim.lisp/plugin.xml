@@ -285,12 +285,13 @@
 		
 		<!-- REPL view -->
 		<view
-	        allowMultiple="false"
-	        category="jasko.tim.lisp"
-	        class="jasko.tim.lisp.views.ReplView"
-	        icon="icons/lisp-file.gif"
-	        id="jasko.tim.lisp.views.ReplView"
-	        name="%View.REPL" />
+        allowMultiple="true"
+        category="jasko.tim.lisp"
+        class="jasko.tim.lisp.views.ReplView"
+        icon="icons/lisp-file.gif"
+        id="jasko.tim.lisp.views.ReplView"
+        name="%View.REPL"
+        restorable="true"/>
 		
 		<!-- Apropos view -->
 		<view
@@ -573,7 +574,42 @@ Disassemble Alt+D
       </action>
     </editorContribution>
   </extension>
-  
+ 
+   <!-- Macro-expand toplevel -->
+  <extension point="org.eclipse.ui.commands">
+    <command
+      categoryId="jasko.tim.lisp.category1"
+      description="%Lisp.Prog.MacroExpandOneTopLevel.Command"
+      id="jasko.tim.lisp.actions.MacroExpandTopLevelAction"
+      name="%Lisp.Prog.MacroExpandOneTopLevel.Name"/>
+  </extension>
+  <extension point="org.eclipse.ui.bindings">
+    <key
+      commandId="jasko.tim.lisp.actions.MacroExpandTopLevelAction"
+      contextId="jasko.tim.lisp.context1"
+      schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+      sequence="Alt+["/>
+    <key
+      commandId="jasko.tim.lisp.actions.MacroExpandTopLevelAction"
+      contextId="jasko.tim.lisp.context1"
+      schemeId="org.eclipse.ui.emacsAcceleratorConfiguration"
+      sequence="Ctrl+C Alt+["/>
+  </extension>
+  <extension point="org.eclipse.ui.editorActions">
+    <editorContribution
+      targetID="jasko.tim.lisp.editors.LispEditor"
+      id="jasko.tim.lisp.menus">
+      <action
+        class="jasko.tim.lisp.editors.actions.MacroExpandTopLevelAction"
+        definitionId="jasko.tim.lisp.actions.MacroExpandTopLevelAction"
+        id="jasko.tim.lisp.editors.actions.MacroExpandTopLevelAction"
+	label="%Lisp.Prog.MacroExpandOneTopLevel.Action"
+        menubarPath="Lisp/grpCode"
+	tooltip="%Lisp.Prog.MacroExpandOneTopLevel.Tooltip">
+      </action>
+    </editorContribution>
+  </extension>
+   
   <!-- Macro-expand -->
   <extension point="org.eclipse.ui.commands">
     <command
@@ -605,6 +641,41 @@ Disassemble Alt+D
 	label="%Lisp.Prog.MacroExpandOne.Action"
         menubarPath="Lisp/grpCode"
 	tooltip="%Lisp.Prog.MacroExpandOne.Tooltip">
+      </action>
+    </editorContribution>
+  </extension>
+  
+   <!-- Macro-expand-all toplevel -->
+  <extension point="org.eclipse.ui.commands">
+    <command
+      categoryId="jasko.tim.lisp.category1"
+      description="%Lisp.Prog.MacroExpandAllTopLevel.Command"
+      id="jasko.tim.lisp.actions.MacroExpandAllTopLevelAction"
+      name="%Lisp.Prog.MacroExpandAllTopLevel.Name"/>
+  </extension>
+  <extension point="org.eclipse.ui.bindings">
+    <key
+      commandId="jasko.tim.lisp.actions.MacroExpandAllTopLevelAction"
+      contextId="jasko.tim.lisp.context1"
+      schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+      sequence="Alt+Shift+["/>
+    <key
+      commandId="jasko.tim.lisp.actions.MacroExpandAllTopLevelAction"
+      contextId="jasko.tim.lisp.context1"
+      schemeId="org.eclipse.ui.emacsAcceleratorConfiguration"
+      sequence="Ctrl+C Esc ["/>
+  </extension>
+  <extension point="org.eclipse.ui.editorActions">
+    <editorContribution
+      targetID="jasko.tim.lisp.editors.LispEditor"
+      id="jasko.tim.lisp.menus">
+      <action
+        class="jasko.tim.lisp.editors.actions.MacroExpandAllTopLevelAction"
+        definitionId="jasko.tim.lisp.actions.MacroExpandAllTopLevelAction"
+        id="jasko.tim.lisp.editors.actions.MacroExpandAllTopLevelAction"
+	label="%Lisp.Prog.MacroExpandAllTopLevel.Action"
+        menubarPath="Lisp/grpCode"
+	tooltip="%Lisp.Prog.MacroExpandAllTopLevel.Tooltip">
       </action>
     </editorContribution>
   </extension>
@@ -644,6 +715,7 @@ Disassemble Alt+D
   </extension>
 
 
+   
   <!-- Undefine function -->
   <extension point="org.eclipse.ui.commands">
     <command
@@ -899,7 +971,7 @@ Jump Forward Ctrl+Alt+Right (paredit: Ctrl+Alt+f)
     </editorContribution>
   </extension>
   
-  <!-- Expand Selection -->
+ <!-- Expand Selection -->
   <extension point="org.eclipse.ui.commands">
     <command
       categoryId="jasko.tim.lisp.category1"
@@ -912,7 +984,7 @@ Jump Forward Ctrl+Alt+Right (paredit: Ctrl+Alt+f)
       commandId="jasko.tim.lisp.editors.actions.ExpandSelectionAction"
       contextId="jasko.tim.lisp.context1"
       schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
-      sequence="Alt+Enter"/>
+      sequence="Shift+Enter"/>
   </extension>
   <extension point="org.eclipse.ui.editorActions">
     <editorContribution
@@ -922,13 +994,45 @@ Jump Forward Ctrl+Alt+Right (paredit: Ctrl+Alt+f)
         class="jasko.tim.lisp.editors.actions.ExpandSelectionAction"
         definitionId="jasko.tim.lisp.editors.actions.ExpandSelectionAction"
         id="jasko.tim.lisp.editors.actions.ExpandSelectionAction"
-	label="%Lisp.Prog.ExpandSelection.Action"
+        label="%Lisp.Prog.ExpandSelection.Action"
         menubarPath="Lisp/grpEditNavigation"
-	tooltip="%Lisp.Prog.ExpandSelection.Tooltip">
+        tooltip="%Lisp.Prog.ExpandSelection.Tooltip">
+      </action>
+    </editorContribution>
+  </extension>
+
+  
+   <!-- Contract Selection -->
+  <extension point="org.eclipse.ui.commands">
+    <command
+      categoryId="jasko.tim.lisp.category1"
+      description="Contract Selection"
+      id="jasko.tim.lisp.editors.actions.ContractSelectionAction"
+      name="Contract Selection"/>
+  </extension>
+  <extension point="org.eclipse.ui.bindings">
+    <key
+      commandId="jasko.tim.lisp.editors.actions.ContractSelectionAction"
+      contextId="jasko.tim.lisp.context1"
+      schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+      sequence="Shift+Space"/>
+  </extension>
+  <extension point="org.eclipse.ui.editorActions">
+    <editorContribution
+      targetID="jasko.tim.lisp.editors.LispEditor"
+      id="jasko.tim.lisp.menus">
+      <action
+        class="jasko.tim.lisp.editors.actions.ContractSelectionAction"
+        definitionId="jasko.tim.lisp.editors.actions.ContractSelectionAction"
+        id="jasko.tim.lisp.editors.actions.ContractSelectionAction"
+	    label="Contract Selection"
+        menubarPath="Lisp/grpEditNavigation"
+	    tooltip="Contract Selection">
       </action>
     </editorContribution>
   </extension>
   
+ 
   <!-- Indent -->
   <extension point="org.eclipse.ui.commands">
     <command
@@ -1425,6 +1529,43 @@ Compile File + Switch Alt+Shift+K
 	</extension>
 	
 	<!-- Compile Top Level and Compile Top Level + Switch -->
+	<extension
+       point="org.eclipse.ui.commands">
+        <command
+            categoryId="jasko.tim.lisp.category1"
+            description="Change Package"
+            id="jasko.tim.lisp.actions.ChangePackageAction"
+            name="Change Package"/>
+        <commandParameterType
+              id="jasko.tim.lisp.commandParameterType1">
+        </commandParameterType>
+    </extension>
+    
+    <extension point="org.eclipse.ui.bindings">
+        <key
+              commandId="jasko.tim.lisp.actions.ChangePackageAction"
+              contextId="jasko.tim.lisp.context1"
+              schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+              sequence="Alt+J"/>
+    </extension>
+    
+    <extension point="org.eclipse.ui.editorActions">
+      <editorContribution
+            targetID="jasko.tim.lisp.editors.LispEditor"
+            id="jasko.tim.lisp.menus">
+            <action
+                class="jasko.tim.lisp.editors.actions.ChangePackageAction"
+                definitionId="jasko.tim.lisp.actions.ChangePackageAction"
+                id="jasko.tim.lisp.editors.actions.ChangePackageAction"
+                label="Change to Curent Package"
+               
+                tooltip="Change to Current Package">
+            </action>
+       </editorContribution>
+   </extension>     
+            
+            
+                       
 	<extension point="org.eclipse.ui.commands">
 		<command
 			categoryId="jasko.tim.lisp.category1"
@@ -1499,6 +1640,8 @@ Compile File + Switch Alt+Shift+K
       parentId="org.eclipse.ui.contexts.window"/>
   </extension>
   -->
+
+
 
   <!-- history dialog/last/next previous REPL command history -->
   <extension point="org.eclipse.ui.commands">
@@ -1591,6 +1734,11 @@ Compile File + Switch Alt+Shift+K
           class="jasko.tim.lisp.preferences.ImplementationsPreferencePage"
           id="jasko.tim.lisp.preferences.LispImplPreferencePage"
           name="%Lisp.Preferences.Implementations"/>
+    <page
+          category="jasko.tim.lisp.preferences.CuspPreferencePage"
+          class="jasko.tim.lisp.preferences.MiscPreferencePage"
+          id="jasko.tim.lisp.preferences.MiscPreferencePage"
+          name="Misc"/>
    <!-- <page
           category="jasko.tim.lisp.preferences.CuspPreferencePage"
           class="jasko.tim.lisp.preferences.BuildPreferences"
@@ -1678,6 +1826,48 @@ Compile File + Switch Alt+Shift+K
 	          contentMergeViewerId="jasko.tim.lisp.views.LispContentViewerCreator">
      </contentTypeBinding>               
  </extension>
+<extension
+      point="org.eclipse.ui.bindings">
+   <key
+         commandId="jasko.tim.lisp.actions.SwitchFocusAction"
+         schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+         sequence="Alt+I">
+   </key>
+</extension>
+<extension
+      point="org.eclipse.ui.commands">
+   <command
+         id="jasko.tim.lisp.actions.SwitchFocusAction"
+         name="Switch Focus">
+   </command>
+</extension>
+<extension
+      point="org.eclipse.ui.popupMenus">
+   <objectContribution
+         adaptable="false"
+         id="jasko.tim.lisp.navigator.UnlinkFileAction.folder"
+         objectClass="org.eclipse.core.resources.IFile">
+      <action
+            class="jasko.tim.lisp.navigator.UnlinkFileAction"
+            icon="icons/lisp-file.gif"
+            id="jasko.tim.lisp.navigator.UnlinkFileAction"
+            label="Unlink File"
+            menubarPath="group.add">
+      </action>
+   </objectContribution>
+</extension>
+
+
+
+
+
+
+
+
+  
+  
+
+
  
 
 </plugin>

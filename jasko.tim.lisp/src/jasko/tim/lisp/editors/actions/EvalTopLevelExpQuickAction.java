@@ -6,6 +6,7 @@ package jasko.tim.lisp.editors.actions;
 import jasko.tim.lisp.LispPlugin;
 import jasko.tim.lisp.editors.LispEditor;
 import jasko.tim.lisp.preferences.PreferenceConstants;
+import jasko.tim.lisp.preferences.PreferenceInitializer;
 import jasko.tim.lisp.views.ReplView;
 
 import org.eclipse.ui.PlatformUI;
@@ -34,6 +35,7 @@ public class EvalTopLevelExpQuickAction extends LispAction {
     				.getActivePage().findView(ReplView.ID);
     			String cleanCmd = exp.replace("\r", "");
     			repl.EvalStateHandle(exp+"\n", cleanCmd);
+    			//TODO:??
     			ReplView.switchToRepl();
     		} catch ( Exception e ){
     			getSwank().sendEval(exp, null);
@@ -42,9 +44,20 @@ public class EvalTopLevelExpQuickAction extends LispAction {
 			getSwank().sendEval(exp, null);        	
         }
 	}
-	
+
 	public void run() {
-		runStr(getTopLevel());
+		String exp = "";
+
+		if (PreferenceInitializer.getStore().getBoolean(PreferenceConstants.EVALUATE_HIGHLIGHT)) {
+			exp = ((LispEditor)super.editor).getHighlighter().getHighlightedString(); 
+			if (exp.equals("")||exp==null)
+				exp = getTopLevelExpression();
+		} 
+		else {
+			exp = getTopLevelExpression();
+		}
+
+		runStr(exp);
 	}	
 
 }

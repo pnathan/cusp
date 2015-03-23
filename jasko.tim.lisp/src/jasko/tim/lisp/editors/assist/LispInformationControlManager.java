@@ -3,9 +3,7 @@ package jasko.tim.lisp.editors.assist;
 import jasko.tim.lisp.editors.*;
 
 import org.eclipse.jface.text.*;
-import org.eclipse.swt.events.*;
 import org.eclipse.swt.graphics.*;
-import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Shell;
 
 /**
@@ -20,9 +18,10 @@ public class LispInformationControlManager extends AbstractInformationControlMan
 	public LispInformationControlManager(LispEditor editor) {
 		super(new LispInformationControlCreator());
 		this.takesFocusWhenVisible(true);
-		
 		this.editor = editor;
-		this.setCloser(new InfoControlCloser());
+		//EDIT: originally, this.setCloser(new InfoControlCloser()) was called. However, the
+		//DefaultInformationControl created by the class LispInformationControlCreator
+		//includes a default IInformationControlCloser implementation!
 	}
 	
 	private String text;
@@ -50,6 +49,9 @@ public class LispInformationControlManager extends AbstractInformationControlMan
 	 * @author Tim Jasko
 	 *
 	 */
+	/*
+	//NOTICE:Below class is redundant for reason above but is included for reference
+	//(even though it does nothing!!!
 	public static class InfoControlCloser implements IInformationControlCloser,
 		DisposeListener, FocusListener {
 		
@@ -78,13 +80,16 @@ public class LispInformationControlManager extends AbstractInformationControlMan
 
 		public void focusGained(FocusEvent e) {
 		}
+		
 
 		public void focusLost(FocusEvent e) {
-			control.dispose();
+			//EDIT: control.dispose() was causing error!
+			//The DefaultInformationControl takes care of closing itself, not this!
+			//control.dispose();
 		}
 	}
 	
-	
+	*/
 	/**
 	 * Creates the InformationControl.
 	 *  I don't know why the interface calls for this class, but it does.

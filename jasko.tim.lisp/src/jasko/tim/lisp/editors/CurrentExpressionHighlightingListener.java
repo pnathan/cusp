@@ -5,6 +5,7 @@ import jasko.tim.lisp.util.LispUtil;
 import java.util.Arrays;
 
 import org.eclipse.jface.text.BadLocationException;
+import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.ITextSelection;
 import org.eclipse.jface.text.Position;
 import org.eclipse.jface.text.source.Annotation;
@@ -25,7 +26,17 @@ public class CurrentExpressionHighlightingListener implements KeyListener, Mouse
     private final Annotation outerAnnotation2 = new Annotation("jasko.tim.lisp.editors.LispEditor.outer-sexp",
 		    false, "");
     
-    private ISourceViewer installedOn;
+    public ISourceViewer installedOn;
+    LispEditor editor = null;
+    public CurrentExpressionHighlightingListener (LispEditor ed) {
+    	editor = ed;
+    }
+    public CurrentExpressionHighlightingListener () {};
+    
+    public int[] getRange ()
+    {
+    	return currentHighlightRange;
+    }
     
     private void removeHighlight () {
         installedOn.getAnnotationModel().removeAnnotation(highlightAnnotation);
@@ -44,10 +55,42 @@ public class CurrentExpressionHighlightingListener implements KeyListener, Mouse
         viewer.getTextWidget().removeMouseListener(this);
     }
 
+    public String getHighlightedString ()
+    {
+    	try
+    	{
+    		IDocument doc = installedOn.getDocument();
+    		int[]range = getHighlightedRange();
+    		return doc.get(range[0],range[1]);
+    	}
+    	catch(BadLocationException e)
+    	{
+    		return null;
+    	}
+    }
+
+    public int[] getHighlightedRange ()
+    {
+    	int[]range = new int[2];
+    	ITextSelection ts = (ITextSelection)installedOn.getSelectionProvider().getSelection();
+    	range[0] = ts.getOffset();
+    	range[1] = ts.getLength();
+    	return range;
+    }
+    
     private void updateHighlighting () {
         ITextSelection ts = (ITextSelection)installedOn.getSelectionProvider().getSelection();
+        if (ts.getLength()==0) {
+        	editor.clearHistory();
+        }
+        
         try {
-            int[] range = LispUtil.getCurrentExpressionRange(installedOn.getDocument(), ts.getOffset());
+        	int[]range;
+        	if (installedOn.getDocument().getLength()>ts.getOffset()&&installedOn.getDocument().getChar(ts.getOffset())=='(') {
+        		range = LispUtil.getCurrentExpressionRange(installedOn.getDocument(), ts.getOffset()+1);}
+        	else 
+                range = LispUtil.getCurrentExpressionRange(installedOn.getDocument(), ts.getOffset());
+        
             try {
                 if (range == null) {
                     removeHighlight();
@@ -56,11 +99,12 @@ public class CurrentExpressionHighlightingListener implements KeyListener, Mouse
                 } else {
                     removeHighlight();
                     installedOn.getAnnotationModel().addAnnotation(highlightAnnotation, new Position(range[0], range[1]));
-                    int start = range[0] - 1;
-                	if (start >= 0) {
-                		int outerRange[] = LispUtil.getCurrentExpressionRange(installedOn.getDocument(), start);
+                    int start = range[0] - 1; 
+                	if (start >= 0) { 
+                		int outerRange[] = LispUtil.getCurrentExpressionRangeWO(installedOn.getDocument(), start);
                 		if (outerRange != null) {
                 			int firstLen = range[0] - outerRange[0];
+                			
                     		installedOn.getAnnotationModel().addAnnotation(outerAnnotation1, new Position(outerRange[0], firstLen));
                     		installedOn.getAnnotationModel().addAnnotation(outerAnnotation2, new Position(range[0] + range[1], outerRange[1] - (firstLen + range[1])));
                     	}

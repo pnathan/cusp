@@ -8,6 +8,8 @@ import jasko.tim.lisp.builder.LispBuilder;
 
 import java.io.*;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.net.*;
 
 import org.eclipse.core.resources.IFile;
@@ -16,7 +18,7 @@ import org.eclipse.swt.widgets.Display;
 
 /*
 C:\sbcl\bin\sbcl.exe --load "C:/slime/swank-loader.lisp" --eval "(swank:create-swank-server 4005 nil)"
-*/
+ */
 
 /**
  * The core guts of the plugin. All traffic to and from our lisp implementation goes through here.
@@ -44,21 +46,33 @@ C:\sbcl\bin\sbcl.exe --load "C:/slime/swank-loader.lisp" --eval "(swank:create-s
  *  @author Tim Jasko
  */
 public class SwankInterface {
+	//has the disconnected function been called? Used to short the Swank started string message
+	//if for some reason pipe has been closed. In both connect functions, this is reset to false. In disconnect,
+	//it is set to true
+	private boolean disconnected = false; //should be false first!!
+	public static final String DEFAULT_ERROR_MESSAGE =
+		"Cusp was unable to connect to your lisp instance.\n"+
+		"Please make sure the Lisp Executable Arguments are correctly set under Lisp Preferences.\n" +
+		"Then try restarting Eclipse.";
+	
+	//when we get multiple SWANKS, this won't work, but since NULL is returned if swank isn't connected,well.
+	protected static String errorMessage = DEFAULT_ERROR_MESSAGE;
+	
 	
 	public LispImplementation implementation;
 
 	private String lispFlavor = "";
 	private String lispCommand = "";
-	
+
 	/** Port of the Swank server */
 	private static Integer port = 4004;
-	
+
 	private Socket echoSocket = null;
 	private Socket secondary = null;
 	private DataOutputStream out = null;
 	DataOutputStream commandInterface = null;
 	private int messageNum = 1;
-	
+
 	/** Holds whether we are connected to Swank. */
 	private boolean connected = false;
 	private String currPackage = "COMMON-LISP-USER";
@@ -75,10 +89,10 @@ public class SwankInterface {
 
 	private ListenerThread listener;
 	private DisplayListenerThread displayListener;
-	
+
 	private DisplayListenerThread stdOut;
 	private DisplayListenerThread stdErr;
-	
+
 	/**
 	 * Holds all outstanding jobs that we're waiting for Lisp to finish processing,
 	 *  except those that are being executed synchronously.
@@ -88,43 +102,63 @@ public class SwankInterface {
 	 * Holds jobs that are being executed synchronously. We handle them slightly differently.
 	 */
 	private Hashtable<String, SyncCallback> syncJobs = new Hashtable<String, SyncCallback>();
-	
+
 	/**
 	 * Listeners to be given debug info, usually right before a :debug-activate.
 	 */
 	private List<SwankRunnable> debugInfoListeners;
-	
+
 	/**
 	 * Listeners to be notified when the debugger is activated.
 	 */
 	private List<SwankRunnable> debugListeners;
-	
+
 	/**
 	 * Listeners to be notified when the debugger should be dismissed
 	 */
 	private List<SwankRunnable> debugReturnListeners;
-	
+
 	/**
 	 * Listeners to be notified of anything to be output.
 	 */
 	private List<SwankRunnable> displayListeners;
-	
+
 	/**
 	 * Listeners to be notified whenever Lisp is trying to read something from the user.
 	 */
 	private List<SwankRunnable> readListeners;
-	
+
 	/**
 	 * For those who want to be informed of the death of our Lisp.
 	 */
 	private List<SwankRunnable> disconnectListeners;
-	
+
 	/**
 	 * Anybody who wants to know that indentation has been updated.
 	 */
 	private List<SwankRunnable> indentationListeners;
-	
+
 	Process lispEngine;
+
+	//dummy swank interface for when an error is thrown yet we need a swawnk object for consistency.
+	//i.e. for the repl view.
+	//ONLY USED WHEN PLUGIN STARTS UP. Other times when we attempt to reconnect and fail,
+	//the REPL message isn't shown. 
+	public SwankInterface (boolean dummy) {
+		connected = false;
+		disconnected = true;
+		
+		debugListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
+		debugInfoListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
+		debugReturnListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
+		displayListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
+		readListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
+		disconnectListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
+		indentationListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
+
+		initIndents();
+		
+	}
 	
 	public SwankInterface() {
 		debugListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
@@ -134,7 +168,7 @@ public class SwankInterface {
 		readListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
 		disconnectListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
 		indentationListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
-	
+
 		initIndents();
 		connect();
 	}
@@ -147,11 +181,11 @@ public class SwankInterface {
 		readListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
 		disconnectListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
 		indentationListeners = Collections.synchronizedList(new ArrayList<SwankRunnable>(1));
-	
+
 		initIndents();
 		connect(flavor,command);
 	}
-	
+
 	public Hashtable<String, String> specialIndents;
 	public Hashtable<String, String> fletIndents;
 	public Hashtable<String, Integer> indents;
@@ -163,11 +197,11 @@ public class SwankInterface {
 		fletIndents.put("flet",			"  ");
 		fletIndents.put("labels",		"  ");
 		fletIndents.put("macrolet",		"  ");
-		
+
 		// for forms that get indented like handler-case
 		handlerCaseIndents = new Hashtable<String, String>();
 		handlerCaseIndents.put("handler-case", "  ");
-		
+
 		// forms that always get indented a certain number of spaces
 		// Why are flet, labels, etc here as well as in fletIndents?
 		//  specialIndents controls how you get indented as a result of your parent form
@@ -196,7 +230,7 @@ public class SwankInterface {
 		specialIndents.put("unwind-protect","  ");
 		specialIndents.put("block",			"  ");
 		specialIndents.put("case",			"  ");
-		
+
 		// All additional custom indents will go here
 		indents = new Hashtable<String, Integer>();
 		indents.put("do", 2);
@@ -217,9 +251,9 @@ public class SwankInterface {
 		indents.put("with-slots", 2);
 		indents.put("with-timeout", 1);
 		indents.put("with-unlocked-packages", 1);
-		
-		
-		
+
+
+
 		addIndentationListener(new SwankRunnable() {
 			public void run() {
 				LispNode updates = result.get(1);
@@ -230,28 +264,28 @@ public class SwankInterface {
 					int paramNum = update.get(2).asInt();
 					indents.put(symbol, paramNum);
 				}
-			
+
 			}
 		});
 	}
-	
-	
-	
+
+
+
 	public boolean isConnected() {
 		return connected;
 	}
-	
+
 	public String getLispVersion() {
 		return lispVersion;
 	}
-	
+
 	public void setLispVersion(String version) {
 		lispVersion = version;
 		LispPlugin.getDefault().updateReplStatusLine("CL:"+lispVersion
 				+"| Cusp: "+LispPlugin.getVersion()
 				+"| Current package: " + getPackage());
 	}
-	
+
 
 	// SK: note, MANAGE_PACKAGES and USE_UNIT_TEST preferences should be
 	// accessed only through SwankInterface.getManagePackages and 
@@ -259,7 +293,7 @@ public class SwankInterface {
 	// when lisp starts
 	private boolean managePackages = false;
 	private boolean useUnitTest = false;
-	
+
 	public boolean getManagePackages(){
 		return managePackages;
 	}
@@ -282,10 +316,10 @@ public class SwankInterface {
 			code += "/";
 		}
 		code = "(com.gigamonkeys.asdf-extensions:register-source-directory \""+
-		  code + "\")";
+		code + "\")";
 		sendEvalAndGrab(code,1000);
 	}
-	
+
 	public void runAfterLispStart() {
 		if( isConnected() ){
 			IPreferenceStore prefs = 
@@ -296,22 +330,38 @@ public class SwankInterface {
 				prefs.getBoolean(PreferenceConstants.USE_UNIT_TEST);
 			String strIni = prefs.getString(PreferenceConstants.LISP_INI);
 			SwankRunnable sr = null;
+			emacsCreateRepl();
+			///////////////////////////////////////////////////////
+			String path = LispPlugin.getDefault().getPluginPath();
+			String extP = path+"lisp-extensions/";
+			String clFadPath = extP+"cl-fad/";
 			
-			String startupCode = "(progn (swank:swank-require :swank-fuzzy)\n"
+			String asdfLoad = 
+				"(handler-case"+
+				" (require 'asdf)"+
+				"  (error (err)"+
+				"     (load \""+extP+"asdf.lisp\")"+
+				"     #+ecl (load \""+extP+"asdf-ecl.lisp\")))";
+
+			String fadLoad = "(progn (push \""+clFadPath+"\" asdf:*central-registry*"+
+								") (asdf:operate 'asdf:load-op 'cl-fad))";
+			
+			String asdfext = "(load \""+extP+"asdf-extensions.lisp\")"; 
+
+			
+			String startupCode = asdfLoad+ "(progn " +asdfext//+fadLoad
+				+ "(swank:swank-require :swank-fuzzy)\n"
 				+ "(swank:swank-require :swank-asdf)\n"
 				+ "(swank:swank-require :swank-presentations)\n"
 				+ "(swank:swank-require :swank-fancy-inspector)\n"
 				+ "(swank:swank-require :swank-arglists)\n"
 				+ "(swank:swank-require :swank-presentations)\n"
 				+ BreakpointAction.macro +"\n"+ WatchAction.macro+"\n";
-			
-			String asdfext = LispPlugin.getDefault().getPluginPath() 
-				+ "lisp-extensions/asdf-extensions.lisp";
-			startupCode += "(load \"" + asdfext + "\")\n";
-			
+
+
 			if ( useUnitTest ){
 				startupCode += "(load \"" + LispPlugin.getDefault().getPluginPath() 
-						+ "lisp-extensions/lisp-unit.lisp" + "\")\n";
+				+ "lisp-extensions/lisp-unit.lisp" + "\")\n";
 			}
 			if( managePackages){				
 				final String code = LispPlugin.getDefault().getLibsPathRegisterCode();
@@ -319,7 +369,7 @@ public class SwankInterface {
 					System.out.printf("asdf path: %s\n", asdfext);
 					sr = new SwankRunnable(){
 						public void run() {
-							emacsRex(code, "COMMON-LISP-USER");
+							emacsRexStartup(code, "COMMON-LISP-USER");
 						}
 					};
 				}
@@ -328,20 +378,20 @@ public class SwankInterface {
 				strIni = strIni.replaceAll("\\\\", "/");
 				startupCode += "(when (probe-file \""+strIni+"\") (load \""+strIni+"\"))\n";
 			}
-			
+
 			startupCode += "(format nil \"You are running ~a ~a via Cusp " 
- 					+ LispPlugin.getVersion() 
- 					+ "\" (lisp-implementation-type) (lisp-implementation-version))"
+				+ LispPlugin.getVersion() 
+				+ "\" (lisp-implementation-type) (lisp-implementation-version))"
 				+ ")";
-			
-			sendEval(startupCode, sr);
+
+			sendEvalStartup(startupCode, sr);
 			//sendEval("(swank:fancy-inspector-init)", null);
-			
-			sendGetConnectionInfo(new SwankRunnable() {
+
+			sendGetConnectionInfoStartup(new SwankRunnable() {
 				public void run() {
 					LispNode impl = getReturn().getf(":lisp-implementation");
 					setLispVersion(impl.getf(":name").value + " "
-						+ impl.getf(":version").value);
+							+ impl.getf(":version").value);
 				}
 			});
 		}
@@ -351,26 +401,39 @@ public class SwankInterface {
 	 * Connects to the swank server.
 	 * 
 	 * @return whether connecting was successful
-	*/
-	public boolean connect() {
+	 */
+
+	public void setErrorMessage (String message) {
+		errorMessage = message;
+	}
+	
+	public void connectInit () {
 		connected = false;
-		currPackage = "COMMON-LISP-USER";
-		//IPreferenceStore store = LispPlugin.getDefault().getPreferenceStore();
+		disconnected = false;
+		currPackage = "COMMON-LISP-USER";	
+		setErrorMessage(DEFAULT_ERROR_MESSAGE);
+	}
+	
+	public boolean connect() {
+		connectInit();
 		
 		synchronized(port) {
 			++port;
-  			implementation = null;
-  			
- 			// First attempt to use preferences to identify lisp implementation
- 			IPreferenceStore prefStore = LispPlugin.getDefault().getPreferenceStore();
- 			if (prefStore.getBoolean(PreferenceConstants.USE_SITEWIDE_LISP)) {
- 				implementation = SiteWideImplementation.findImplementation();
- 			} else if (prefStore.getBoolean(PreferenceConstants.USE_REMOTE_LISP)) {  
-  				implementation = RemoteImplementation.findImplementation();
-   			}
- 			
- 			// As a fallback, if the above failed, find an implementation 
- 			// and start a lisp process trying sbcl and allegro in default locations:
+			implementation = null;
+
+			// First attempt to use preferences to identify lisp implementation
+			IPreferenceStore prefStore = LispPlugin.getDefault().getPreferenceStore();
+			if (prefStore.getBoolean(PreferenceConstants.USE_REMOTE_LISP)) {  
+				implementation = RemoteImplementation.findImplementation();
+			} else {
+				implementation = SiteWideImplementation.findImplementation();
+			}
+
+			// As a fallback, if the above failed, find an implementation 
+			// and start a lisp process trying sbcl and allegro in default locations:
+			//if (implementation==null) {
+			//	implementation = ClispImplementation.findImplementation();
+			//}
 			if (implementation == null) {
 				implementation = SBCLImplementation.findImplementation();
 			}
@@ -382,7 +445,7 @@ public class SwankInterface {
 			String slimePath = pluginDir + "slime/swank-loader.lisp";
 			if (implementation != null) {
 				try {
-					lispEngine = implementation.start(slimePath, port);
+					lispEngine = implementation.startLisp(slimePath, port);
 				} catch (IOException e3) {
 					e3.printStackTrace();
 					return false;
@@ -397,7 +460,7 @@ public class SwankInterface {
 					return false;
 				}
 			}
-			
+
 			int retries = 1;
 			do {
 				if (connectStreams(slimePath)) {
@@ -410,7 +473,8 @@ public class SwankInterface {
 					} catch (UnknownHostException e) {
 						return false;
 					} catch (IOException e) {
-						try {
+						return false;
+						/*try {
 							int val = lispEngine.exitValue();
 							System.out.println("exit: " + val);
 
@@ -419,12 +483,13 @@ public class SwankInterface {
 						} catch (IOException e2) {
 							e.printStackTrace();
 							return false;
-						}
+						}*/
 					}
 				}
+				--retries;
 			} while (retries >= 0);
 		} // synchronized
-		
+
 		//sendRaw("(:emacs-rex (swank:connection-info) nil t 1)");
 		if (echoSocket != null && echoSocket.isConnected()) {
 			connected = true;
@@ -435,30 +500,33 @@ public class SwankInterface {
 		return connected;
 	}
 
+	public String getErrorMessage () {
+		return errorMessage;
+	}
+	
 	// FIXME: right now implemented only for sbcl. In this case command is a filepath to sbcl
 	public boolean connect(String flavor, String command) {
-		connected = false;
-		currPackage = "COMMON-LISP-USER";
+		connectInit();
 		//IPreferenceStore store = LispPlugin.getDefault().getPreferenceStore();
-		
+
 		if( !flavor.equalsIgnoreCase("sbcl") ){
 			return false;
 		}
-		
+
 		lispFlavor = flavor;
 		lispCommand = command;
-		
+
 		synchronized(port) {
 			++port;
 			implementation = null;
-			
+
 			implementation = SBCLImplementation.findImplementation(command);
 
 			String pluginDir = LispPlugin.getDefault().getPluginPath();
 			String slimePath = pluginDir + "slime/swank-loader.lisp";
 			if (implementation != null) {
 				try {
-					lispEngine = implementation.start(slimePath, port);
+					lispEngine = implementation.startLisp(slimePath, port);
 				} catch (IOException e3) {
 					e3.printStackTrace();
 					return false;
@@ -472,7 +540,7 @@ public class SwankInterface {
 					return false;
 				}
 			}
-			
+
 			int retries = 1;
 			do {
 				if (connectStreams(slimePath)) {
@@ -485,7 +553,8 @@ public class SwankInterface {
 					} catch (UnknownHostException e) {
 						return false;
 					} catch (IOException e) {
-						try {
+						return false;
+						/*try {
 							int val = lispEngine.exitValue();
 							System.out.println("exit: " + val);
 
@@ -494,12 +563,12 @@ public class SwankInterface {
 						} catch (IOException e2) {
 							e.printStackTrace();
 							return false;
-						}
+						} */
 					}
 				}
 			} while (retries >= 0);
 		} // synchronized
-		
+
 		//sendRaw("(:emacs-rex (swank:connection-info) nil t 1)");
 		if (echoSocket != null && echoSocket.isConnected()) {
 			connected = true;
@@ -509,8 +578,8 @@ public class SwankInterface {
 		runAfterLispStart();
 		return connected;
 	}
-	
-	
+
+
 	private boolean connectStreams(String slimePath) {
 		if (stdOut != null) { // never cross the streams
 			stdOut.running = false;
@@ -523,16 +592,18 @@ public class SwankInterface {
 		SwankStartFilter ssfilter = new SwankStartFilter();
 		int retries = 7;
 		
+		try {
 		stdOut = new DisplayListenerThread(lispEngine.getInputStream(), true);
 		stdErr = new DisplayListenerThread(lispEngine.getErrorStream(), true);
 
 		stdOut.addFilter(ssfilter);
 		stdErr.addFilter(ssfilter);
-		
+
 		stdOut.start();
 		stdErr.start();
-
-		try {
+	
+		
+	
 			commandInterface = new DataOutputStream(lispEngine.getOutputStream());
 			//commandInterface.writeBytes("(progn (swank:create-swank-server " + port + " nil) (quit))\n");
 			//commandInterface.writeBytes("(load \"" + slimePath.replace("\\", "\\\\") + "\")\n");
@@ -544,7 +615,7 @@ public class SwankInterface {
 			commandInterface.flush();
 			commandInterface.writeBytes("(progn (swank:create-server :coding-system \"utf-8\" :port " + port + "))\n");
 			commandInterface.flush();
-			
+
 			while (!ssfilter.getStartStringFlag() && retries > 0) {
 				synchronized (ssfilter) {
 					try {
@@ -553,6 +624,10 @@ public class SwankInterface {
 					} catch(Exception e) {
 						// ignore all exceptions (this might be dangerous)
 					} finally {
+						if (isDisconnected()) {
+							setErrorMessage(DEFAULT_ERROR_MESSAGE+"\nReason: Connection was closed (Lisp Executable Arguments incorrect?).");
+							return false;
+						}
 						if (!ssfilter.getStartStringFlag()) {
 							System.err.println("still waiting for 'Swank started' string... retries = " + retries);
 							--retries;
@@ -563,14 +638,18 @@ public class SwankInterface {
 		} catch (IOException e2) {
 			e2.printStackTrace();
 			return false;
-		} finally {
+		} 
+		 catch (NullPointerException e) { //prevent annoying errors which occur randomly when we fail to connect to lisp
+			return false;
+		}
+		finally {
 			stdOut.removeFilter(ssfilter);
 			stdErr.removeFilter(ssfilter);
 		}
-		
+
 		return (retries > 0);
 	}
-	
+
 	public void reconnect() {
 		disconnect();
 		if( lispFlavor != "" ){
@@ -579,9 +658,18 @@ public class SwankInterface {
 			connect();			
 		}
 	}
+
+	public boolean isDisconnected () {
+		return disconnected;
+	}
+	
+	public void disconnectInit () {
+		connected = false;
+		disconnected = true;
+	}
 	
 	public void disconnect() {
-		connected = false;
+		disconnectInit();
 		signalListeners(disconnectListeners, new LispNode());
 		System.out.println("*disconnect");
 		if (System.getProperty("os.name").toLowerCase().contains("windows")) {
@@ -590,14 +678,16 @@ public class SwankInterface {
 				lispEngine = null;
 			}
 		}
-		
+
 		try {
 			commandInterface.writeBytes("(swank:quit-lisp)\n");
 			commandInterface.flush();
 		} catch (IOException e) {
 			e.printStackTrace();
+		} catch (NullPointerException e) {
+			e.printStackTrace();
 		}
-		
+
 		try {
 			if (displayListener != null) {
 				displayListener.running = false;
@@ -608,7 +698,7 @@ public class SwankInterface {
 			if (stdErr != null) {
 				stdErr.running = false;
 			}
-			
+
 			if (listener != null) {
 				listener.running = false;
 			} else {
@@ -617,104 +707,105 @@ public class SwankInterface {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		
+
 		try {
 			if (lispEngine != null) {
 				currPackage = "COMMON-LISP-USER";
 				//sendEval("(quit)", null);
-				
-				
+
+
 				//lispEngine.destroy();
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+
 	}
-	
+
 	public void addReadListener(SwankRunnable callBack) {
 		synchronized (readListeners) {
 			readListeners.add(callBack);
 		}
 	}
-	
+
 	public void addDebugListener(SwankRunnable callBack) {
 		synchronized (debugListeners) {
 			debugListeners.add(callBack);
 		}
 	}
-	
+
 	public void addDebugInfoListener(SwankRunnable callBack) {
 		synchronized (debugInfoListeners) {
 			debugInfoListeners.add(callBack);
 		}
 	}
-	
+
 	public void addDebugReturnListener(SwankRunnable callBack) {
 		synchronized (debugReturnListeners) {
 			debugReturnListeners.add(callBack);
 		}
 	}
-	
+
 	public void addDisplayCallback(SwankRunnable callBack) {
 		synchronized (displayListeners) {
 			displayListeners.add(callBack);
 		}
 	}
-	
+
 	public void addDisconnectCallback(SwankRunnable callBack) {
 		synchronized (disconnectListeners) {
 			disconnectListeners.add(callBack);
 		}
 	}
-	
+
 	public void addIndentationListener(SwankRunnable callBack) {
 		synchronized (indentationListeners) {
 			indentationListeners.add(callBack);
 		}
 	}
-	
+
 	public void removeReadListener(SwankRunnable callBack) {
 		synchronized (readListeners) {
 			readListeners.remove(callBack);
 		}
 	}
-	
+
 	public void removeDebugListener(SwankRunnable callBack) {
 		synchronized (debugListeners) {
 			debugListeners.remove(callBack);
 		}
 	}
-	
+
 	public void removeDebugInfoListener(SwankRunnable callBack) {
 		synchronized (debugInfoListeners) {
 			debugInfoListeners.remove(callBack);
 		}
 	}
-	
+
 	public void removeDebugReturnListener(SwankRunnable callBack) {
 		synchronized (debugReturnListeners) {
 			debugReturnListeners.remove(callBack);
 		}
 	}
-	
+
 	public void removeDisplayCallback(SwankRunnable callBack) {
 		synchronized (displayListeners) {
 			displayListeners.remove(callBack);
 		}
 	}
-	
+
 	public void removeDisconnectCallback(SwankRunnable callBack) {
 		synchronized (disconnectListeners) {
 			disconnectListeners.remove(callBack);
 		}
 	}
-	
+
 	public void removeIndentationListener(SwankRunnable callBack) {
 		synchronized (indentationListeners) {
 			indentationListeners.remove(callBack);
 		}
 	}
-	
+
 	private void registerCallback(SwankRunnable callBack) {
 		++messageNum;
 		if (callBack != null) {
@@ -722,19 +813,19 @@ public class SwankInterface {
 			jobs.put(new Integer(messageNum).toString(), callBack);
 		}
 	}
-	
+
 	public String getPackage() {
 		return currPackage;
 	}
-	
+
 	public synchronized void setPackage(String p) {
 		++messageNum;
 		String newPackage = LispUtil.formatCode(p);
 		emacsRex("(swank:set-package \"" + newPackage + "\")", currPackage);
-		
+
 		currPackage = newPackage;
 	}
-	
+
 	//finds definitions in package pkg: 
 	private synchronized boolean haveDefinitionsPkg(String symbol, String pkg, long timeout) {
 		SyncCallback callBack = new SyncCallback();
@@ -749,14 +840,14 @@ public class SwankInterface {
 		if( !pkgstring.equals("") ) {
 			pkgstring += "::";
 		}
-		String msg = "(handler-case (swank:find-definitions-for-emacs \""+pkgstring+code
-			+"\") (simple-type-error () nil))";
+		String msg = "(handler-case (swank::find-definitions-for-emacs \""+pkgstring+code
+		+"\") (simple-type-error () nil))";
 		if( implementation.lispType().equalsIgnoreCase("SBCL") ) { //quiet compilation warnings
 			msg = "(locally (declare (sb-ext:muffle-conditions sb-ext:compiler-note)) "
 				+ msg + ")";
 		}
 		String res = sendEvalAndGrab(msg,2000);
-		
+
 		return (!(res.equalsIgnoreCase("nil") || (res.contains(":ERROR") && !res.contains(":LOCATION"))));
 	}
 
@@ -764,7 +855,7 @@ public class SwankInterface {
 	public synchronized boolean haveDefinitions(String symbol, String pkg, long timeout) {
 		return (haveDefinitionsPkg(symbol,pkg,timeout) || haveDefinitionsPkg(symbol,"",timeout));
 	}
-	
+
 	/**
 	 * 
 	 * @param start of the string
@@ -805,7 +896,7 @@ public class SwankInterface {
 		}
 		msg += "))))";
 		msg += "(list lst (mapcar #'(lambda (y) (swank:operator-arglist y " + LispUtil.cleanPackage(pkg) + ")) lst)" +
-				" (mapcar #'(lambda (z) (swank:documentation-symbol z)) lst)))";
+		" (mapcar #'(lambda (z) (swank:documentation-symbol z)) lst)))";
 		LispNode resNode = LispParser.parse(sendEvalAndGrab(msg, usepkg, timeout));
 		LispNode compl = resNode.car().get(0);
 		LispNode args = resNode.car().get(1);
@@ -814,7 +905,7 @@ public class SwankInterface {
 		if( 0 == nn ){
 			return null;
 		}
-		
+
 		String[][] res = new String[2][nn];
 
 		for( int i = 0; i < nn; ++i ){
@@ -839,13 +930,13 @@ public class SwankInterface {
 			res[1][i] = info;
 		}
 		return res;
-		
+
 	}
-	
+
 	public synchronized String[] getCompletions(String start, long timeout) {
 		return getCompletions(start, currPackage, timeout);
 	}
-	
+
 	public synchronized String[] getCompletions(String start, String pkg, long timeout) {
 		SyncCallback callBack = new SyncCallback();
 		++messageNum;
@@ -854,7 +945,7 @@ public class SwankInterface {
 		IPreferenceStore prefs = LispPlugin.getDefault().getPreferenceStore();
 		String msg = "";
 		int nlim = 0;
-		
+
 		boolean usefuzzy = prefs.getBoolean(PreferenceConstants.AUTO_FUZZY_COMPLETIONS);
 		if ( usefuzzy ){
 			String tlimit = "50";
@@ -865,11 +956,11 @@ public class SwankInterface {
 				nlim = prefs.getInt(PreferenceConstants.AUTO_COMPLETIONS_NLIMIT);
 			}
 			msg = "(swank:fuzzy-completions \"" + start + "\" " + LispUtil.cleanPackage(pkg) 
-				+ " :limit " + nlimit + " :time-limit-in-msec "+ tlimit + ")";			
+			+ " :limit " + nlimit + " :time-limit-in-msec "+ tlimit + ")";			
 		} else {
 			msg = "(swank:simple-completions \"" + start + "\" " + LispUtil.cleanPackage(pkg) + ")";			
 		}
-		
+
 		try {
 			synchronized (callBack) {
 				if (emacsRex(msg)) {
@@ -905,22 +996,22 @@ public class SwankInterface {
 			return null;
 		} // catch
 	}
-	
+
 	public synchronized String getArglist(String function, long timeout) {
 		return getArglist(function, timeout, currPackage);
 	}
-	
+
 	public synchronized String getArglist(String function, long timeout, String currPackage) {
 		SyncCallback callBack = new SyncCallback();
 		++messageNum;
 		syncJobs.put(new Integer(messageNum).toString(), callBack);
-		
+
 		String msg = "(swank:operator-arglist \"" + LispUtil.formatCode(function) + "\" " + LispUtil.cleanPackage(currPackage) + " )";
-		
+
 		try {
 			synchronized (callBack) {
 				if (emacsRex(msg,currPackage)) {
-		
+
 					callBack.wait(timeout);
 					return callBack.result.cadr().cadr().value;
 				} else {
@@ -932,18 +1023,18 @@ public class SwankInterface {
 			return "";
 		}
 	}
-	
+
 	public synchronized void sendGetArglist(String function, String currPackage, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:operator-arglist \"" + LispUtil.formatCode(function) + "\" " + LispUtil.cleanPackage(currPackage) + ")";
-		
+
 		emacsRex(msg, currPackage);
 	}
-	
+
 	public synchronized String getMakeInstanceArglist(String className, long timeout) {
 		return getMakeInstanceArglist(className, currPackage, timeout);
 	}
-	
+
 	public synchronized String getMakeInstanceArglist(String className, String pkg, long timeout) {
 		SyncCallback callBack = new SyncCallback();
 		++messageNum;
@@ -951,11 +1042,11 @@ public class SwankInterface {
 		//(swank:arglist-for-echo-area (quote ((:make-instance "some-class" "make-instance"))))
 		String msg = "(swank:arglist-for-echo-area (quote ((\"MAKE-INSTANCE\" \"'"
 			+ LispUtil.formatCode(className) + "\"))))";
-		
+
 		try {
 			synchronized (callBack) {
 				if (emacsRex(msg, pkg)) {
-		
+
 					callBack.wait(timeout);
 					return callBack.result.getf(":return").getf(":ok").value;
 				} else {
@@ -967,23 +1058,23 @@ public class SwankInterface {
 			return "";
 		}
 	}
-	
+
 	public synchronized String getSpecialArglist(String function, String arg0, long timeout) {
 		return getSpecialArglist(function, arg0, currPackage, timeout);
 	}
-	
+
 	public synchronized String getSpecialArglist(String function, String arg0, String pkg, long timeout) {
 		SyncCallback callBack = new SyncCallback();
 		++messageNum;
 		syncJobs.put(new Integer(messageNum).toString(), callBack);
 		//(swank:arglist-for-echo-area (quote ((:make-instance "some-class" "make-instance"))))
 		String msg = "(swank:arglist-for-echo-area (quote ((\"" + LispUtil.formatCode(function) + "\" \""
-			+ LispUtil.formatCode(arg0) + "\" ))))";
-		
+		+ LispUtil.formatCode(arg0) + "\" ))))";
+
 		try {
 			synchronized (callBack) {
 				if (emacsRex(msg, pkg)) {
-		
+
 					callBack.wait(timeout);
 					return callBack.result.getf(":return").getf(":ok").value;
 				} else {
@@ -995,29 +1086,29 @@ public class SwankInterface {
 			return "";
 		}
 	}
-	
+
 	public synchronized void sendGetDocumentation(String function, String pkg, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:documentation-symbol \"" + LispUtil.formatCode(function) + "\")";
-		
+
 		emacsRex(msg, pkg);
 	}
-	
+
 	public synchronized String getDocumentation(String function, long timeout) {
- 		return getDocumentation(function,currPackage,timeout);
- 	}
- 	
- 	public synchronized String getDocumentation(String function, String pkg, long timeout) {
+		return getDocumentation(function,currPackage,timeout);
+	}
+
+	public synchronized String getDocumentation(String function, String pkg, long timeout) {
 		SyncCallback callBack = new SyncCallback();
 		++messageNum;
 		syncJobs.put(new Integer(messageNum).toString(), callBack);
-		
+
 		String msg = "(swank:documentation-symbol \"" + LispUtil.formatCode(function) + "\")";
-		
+
 		try {
 			synchronized (callBack) {
 				if (emacsRex(msg, pkg)) {
-		
+
 					callBack.wait(timeout);
 					String result = callBack.result.getf(":return").getf(":ok").value;
 					if (result.equalsIgnoreCase("nil")) {
@@ -1034,24 +1125,39 @@ public class SwankInterface {
 			return "";
 		}
 	}
-	
+
 	private class SyncCallback{
 		public LispNode result = new LispNode();
 	}
-	
+
+
+	public synchronized void sendEvalStartup(String message, SwankRunnable callBack) {
+		registerCallback(callBack);
+		message = message + "\n";
+		String msg = "(swank:listener-eval \"" + LispUtil.formatCode(message) + "\")";
+
+		emacsRexStartup(msg);
+	}
 	
 	public synchronized void sendEval(String message, SwankRunnable callBack) {
 		registerCallback(callBack);
 		message = message + "\n";
 		String msg = "(swank:listener-eval \"" + LispUtil.formatCode(message) + "\")";
-		
+
 		emacsRex(msg);
+	}
+	public synchronized void sendEval(String message, String pkg,SwankRunnable callBack) {
+		registerCallback(callBack);
+		message = message + "\n";
+		String msg = "(swank:listener-eval \"" + LispUtil.formatCode(message) + "\")";
+
+		emacsRex(msg,pkg);
 	}
 
 	public synchronized String sendEvalAndGrab(String message, long timeout) {
 		return sendEvalAndGrab(message,"nil", timeout);
 	}
-	
+
 	/* TODO: - make it with progress bar */
 	public synchronized String sendEvalAndGrab(String message,  String pkg, long timeout) {
 		SyncCallback callBack = new SyncCallback();
@@ -1079,178 +1185,178 @@ public class SwankInterface {
 			return "";
 		} // catch
 	}
-	
+
 	public synchronized void sendRunTests(String pkg, SwankRunnable callBack){
 		registerCallback(callBack);
 		lastTestPackage = pkg;
 		String msg = "(lisp-unit:run-all-tests "+pkg+")";
-//		msg = "(let ((*standard-output* str))"+msg+")";
-//		msg = "(with-output-to-string (str) "+msg+"str)";
+		//		msg = "(let ((*standard-output* str))"+msg+")";
+		//		msg = "(with-output-to-string (str) "+msg+"str)";
 		msg = "(swank:eval-and-grab-output \""+msg+"\")";
-		
+
 		emacsRex(msg,"COMMON-LISP-USER");
 	}
-		
+
 	public synchronized void sendDebug(String commandNum, String sldbLevel, String threadId, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:invoke-nth-restart-for-emacs " + sldbLevel + " "
-			+ commandNum + ")";
-		
+		+ commandNum + ")";
+
 		emacsRexWithThread(msg, threadId);
 	}
-	
+
 	public synchronized void sendAbortDebug(SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:sdbl-abort)";
-		
+
 		emacsRex(msg, getPackage());
 	}
-	
+
 	public synchronized void sendContinueDebug(SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:sdbl-continue)";
-		
+
 		emacsRex(msg);
 	}
-	
+
 	public synchronized void sendQuitDebug(SwankRunnable callBack, String threadId) {
 		registerCallback(callBack);
 		String msg = "(swank:throw-to-toplevel)";
-		
+
 		emacsRexWithThread(msg, threadId);
 	}
-	
+
 	// Stepping related
-	
+
 	public synchronized void sendStepDebug(SwankRunnable callBack, String threadId) {
 		registerCallback(callBack);
 		String msg = "(swank:sldb-step 0)";
-		
+
 		emacsRexWithThread(msg, threadId);
 	}
-	
+
 	// Inspection related
-	
+
 	public synchronized void sendInspectReplResult(String num, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:init-inspector \"(swank:get-repl-result #10r" + num 
-			+ ")\" )";
-		
+		+ ")\" )";
+
 		emacsRex(msg);
 	}
-	
+
 	public synchronized void sendInspectInspectedPart(String partNum, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:inspect-nth-part " + partNum + ")";
-		
+
 		emacsRex(msg);
 	}
-	
+
 	public synchronized void sendInspectorPop(SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:inspector-pop)";
 		emacsRex(msg);
 	}
-	
+
 	public synchronized void sendInspectorNext(SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:inspector-next)";
 		emacsRex(msg);
 	}
-	
+
 	public synchronized void sendInspectFrameLocal(String threadNum, String frameNum, String varNum, SwankRunnable callBack) {
 		registerCallback(callBack);
-		String msg = "(swank:inspect-frame-var " + frameNum + " " + varNum + ")";
-		
+		String msg = "(swank::inspect-frame-var " + frameNum + " " + varNum + ")";
+
 		emacsRexWithThread(msg, threadNum);
 	}
-	
+
 	// Debug related
-	
+
 	public synchronized void sendGetFrameLocals(String frameNum, String threadId, SwankRunnable callBack) {
 		registerCallback(callBack);
-		String msg = "(swank:frame-locals-for-emacs " + frameNum + ")";
-		
+		String msg = "(swank::frame-locals-for-emacs " + frameNum + ")";
+
 		emacsRexWithThread(msg, threadId);
 	}
-	
+
 	public synchronized void sendGetFrameSourceLocation(String frameNum, String threadId, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:frame-source-location-for-emacs " + frameNum + ")";
-		
+
 		emacsRexWithThread(msg, threadId);
 	}
-	
+
 	public synchronized void sendDisassemble(String symbol, String pkg, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:disassemble-symbol \"" + symbol + "\")";
-		
+
 		emacsRex(msg, pkg);
 	}
-	
+
 	public synchronized void sendReadString(String input, SwankRunnable callBack, String num1, String num2) {
 		registerCallback(callBack);
 		String msg = "(:emacs-return-string " + num1 + " " + num2 + " \"" + LispUtil.formatCode(input) + "\")";
-		
+
 		sendRaw(msg);
 	}
-	
+
 	public synchronized void sendFindDefinitions(String symbol, String pkg, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:find-definitions-for-emacs \"" + LispUtil.formatCode(symbol) + "\")";
-		
+
 		emacsRex(msg, pkg);
 	}
-	
+
 	public synchronized void sendUndefine(String symbol, String pkg, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:undefine-function \"" + LispUtil.formatCode(symbol) + "\")";
-		
+
 		emacsRex(msg, pkg);
 	}
-	
+
 	public synchronized void sendUndefineTest(String symbol, String pkg, SwankRunnable callBack) {
 		registerCallback(callBack);
 		lastTestPackage = pkg;
 		String msg = "(lisp-unit:remove-tests '("+pkg+"::"+LispUtil.formatCode(symbol)+") '"+pkg+")";
-//		msg = "(let ((*standard-output* str))"+msg+")";
-//		msg = "(with-output-to-string (str) "+msg+"str)";
+		//		msg = "(let ((*standard-output* str))"+msg+")";
+		//		msg = "(with-output-to-string (str) "+msg+"str)";
 		msg = "(swank:eval-and-grab-output \""+msg+"\")";
-		
+
 		emacsRex(msg,"COMMON-LISP-USER");
 	}
-	
+
 	public synchronized void sendInterrupt(SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(:emacs-interrupt :repl-thread)\n";
-		
+
 		sendRaw(msg);
 	}
-	
-	
+
+
 	// Threads
-	
+
 	public synchronized void sendListThreads(SwankRunnable callBack) {
 		registerCallback(callBack);
 		emacsRex("(swank:list-threads)");
 	}
-	
+
 	public synchronized void sendDebugThread(String threadNum, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:debug-nth-thread " + threadNum + ")";
-		
+
 		emacsRex(msg);
 	}
-	
+
 	public synchronized void sendKillThread(String threadNum, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:kill-nth-thread " + threadNum + ")";
-		
+
 		emacsRex(msg);
 	}
-	
-	
-	
+
+
+
 	public synchronized void sendApropos(String regex, SwankRunnable callBack) {
 		registerCallback(callBack);
 		// Need to protect against these, as they send lisp into an endless loop.
@@ -1262,12 +1368,12 @@ public class SwankInterface {
 		}
 		String msg = "(swank:apropos-list-for-emacs \""
 			+ LispUtil.formatCode(regex) + "\" t nil)";
-		
+
 		emacsRex(msg);
 	}
-	
-	
-	
+
+
+
 	public synchronized void sendMacroExpand(String code, SwankRunnable callBack, boolean all, String pckg) {
 		registerCallback(callBack);
 		String msg;
@@ -1276,12 +1382,12 @@ public class SwankInterface {
 		} else {
 			msg = "(swank:swank-macroexpand-1 \"" + LispUtil.formatCode(code) + "\")";
 		}
-		
+
 		emacsRex(msg, pckg);
 	}
-	
+
 	// Compiling
-	
+
 	public synchronized void sendCompileString(String expr, String file, 
 			String dir, int offset, String pckg, SwankRunnable callBack) {
 		registerCallback(callBack);
@@ -1291,24 +1397,24 @@ public class SwankInterface {
 		String msg = "(swank:compile-string-for-emacs \""
 			+ LispUtil.formatCode(expr) + "\" \""
 			+ LispUtil.formatCode(dir + file) + "\" " + (offset+1) + " \"" + LispUtil.formatCode(dir)
-			+ "\" 3)"; // 3 = debug level
+			+ "\" '((cl::debug . 3)))"; // 3 = debug level
 		if (pckg.equalsIgnoreCase("nil")) {
 			emacsRex(msg);
 		} else {
 			emacsRex(msg, pckg);
 		}
 	}
-	
+
 	public synchronized void sendCompileFile(String filePath, SwankRunnable callBack) {
 		registerCallback(callBack);
 		filePath = filePath.replace('\\', '/');
 		filePath = implementation.translateLocalFilePath(filePath);
 		String msg = "(swank:compile-file-for-emacs \""
 			+ filePath + "\" t)";
-		
+
 		emacsRex(msg);
 	}
-	
+
 	public void compileAndLoadAsd(IFile file, boolean switchToPackage){
 		if( file == null ){
 			return;
@@ -1325,33 +1431,33 @@ public class SwankInterface {
 			registerLibPath(path);
 			registerCallback(new LispBuilder.CompileListener(true,fullpath,switchToPackage));
 			String msg = "(swank:operate-on-system-for-emacs \"" + name + "\" \"LOAD-OP\")";
- 			emacsRex(msg);
+			emacsRex(msg);
 		}
-		
+
 	}
-	
+
 
 	public synchronized void sendLoadASDFtoRemove(String fileFullPath, SwankRunnable callBack) {
- 		fileFullPath = fileFullPath.replace('\\', '/');
- 		fileFullPath = implementation.translateLocalFilePath(fileFullPath);
- 		String[] fpathparts = fileFullPath.split("/");
- 		if( fpathparts.length > 0 && fpathparts[fpathparts.length-1].matches(".+\\.asd") ){
- 			registerCallback(callBack);
- 			String asdName = fpathparts[fpathparts.length-1].replace(".asd", "");
- 			// Note from Tim:
- 			// I changed this back, because the newer implementation assumed
- 			// that (load ...) will get done in two seconds, which is a false
- 			// assumption, particularly on most of my pet projects.
- 			// If you want to alter this, you'll need to make sure the
- 			// load-op command is not issued until load is done.
- 			// Might need some callback-fu.
- 			String msg = "(cl:progn (cl:load \"" + fileFullPath + 
- 				"\") (asdf:oos 'asdf:load-op \"" + asdName + "\"))";
- 			
- 			emacsRex(msg);	
- 		}
- 		// old version of code:
- 		/*
+		fileFullPath = fileFullPath.replace('\\', '/');
+		fileFullPath = implementation.translateLocalFilePath(fileFullPath);
+		String[] fpathparts = fileFullPath.split("/");
+		if( fpathparts.length > 0 && fpathparts[fpathparts.length-1].matches(".+\\.asd") ){
+			registerCallback(callBack);
+			String asdName = fpathparts[fpathparts.length-1].replace(".asd", "");
+			// Note from Tim:
+			// I changed this back, because the newer implementation assumed
+			// that (load ...) will get done in two seconds, which is a false
+			// assumption, particularly on most of my pet projects.
+			// If you want to alter this, you'll need to make sure the
+			// load-op command is not issued until load is done.
+			// Might need some callback-fu.
+			String msg = "(cl:progn (cl:load \"" + fileFullPath + 
+			"\") (asdf:oos 'asdf:load-op \"" + asdName + "\"))";
+
+			emacsRex(msg);	
+		}
+		// old version of code:
+		/*
  		fileFullPath = fileFullPath.replace('\\', '/');
  		fileFullPath = implementation.translateLocalFilePath(fileFullPath);
  		String[] fpathparts = fileFullPath.split("/");
@@ -1362,29 +1468,36 @@ public class SwankInterface {
  			String msg = "(swank:operate-on-system-for-emacs \"" + asdName + "\" \"LOAD-OP\")";
  			emacsRex(msg);			
  		}
-		*/
- 		 
- 	}
-		
+		 */
+
+	}
+
 	public synchronized void sendLoadPackage(String pkg) {
 		sendEvalAndGrab("(asdf:operate 'asdf:load-op :"+pkg+")",3000);
 	}		
-	
+
+
+	public synchronized void sendGetConnectionInfoStartup(SwankRunnable callBack) {
+		registerCallback(callBack);
+		String msg = "(swank:connection-info)";
+
+		emacsRexStartup(msg);
+	}
 	
 	public synchronized void sendGetConnectionInfo(SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:connection-info)";
-		
+
 		emacsRex(msg);
 	}
-	
+
 	public synchronized void sendGetAvailablePackages(SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:list-all-package-names t)";
-		
+
 		emacsRex(msg);
 	}
-	
+
 	public synchronized ArrayList<String> getAvailablePackages(long timeout) {
 		SyncCallback callback = new SyncCallback();
 		++messageNum;
@@ -1397,7 +1510,7 @@ public class SwankInterface {
 				if (emacsRex("(swank:list-all-package-names t)")) {
 					callback.wait(timeout);
 					LispNode packages = callback.result.getf(":return").getf(
-							":ok");
+					":ok");
 					for (LispNode p : packages.params) {
 						packageNames.add(p.value);
 					}
@@ -1412,7 +1525,7 @@ public class SwankInterface {
 
 	public synchronized ArrayList<String> getPackagesWithTests(long timeout) {
 		if ( useUnitTest ){
-			
+
 			SyncCallback callback = new SyncCallback();
 			++messageNum;
 			syncJobs.put(new Integer(messageNum).toString(), callback);
@@ -1420,7 +1533,7 @@ public class SwankInterface {
 			java.util.ArrayList<String> packageNames = new java.util.ArrayList<String>();
 
 			String res = sendEvalAndGrab("(let ((res '())) (dolist (pkg (swank:list-all-package-names t) res)"+
-			  "(if (lisp-unit:get-tests pkg) (push pkg res))))",
+					"(if (lisp-unit:get-tests pkg) (push pkg res))))",
 					"COMMON-LISP-USER", timeout);
 			LispNode resnode = LispParser.parse(res).get(0);
 			for (LispNode p : resnode.params) {
@@ -1432,7 +1545,7 @@ public class SwankInterface {
 		}
 	}
 
-	
+
 	public synchronized void sendGetInstalledPackages(SwankRunnable callBack) {
 		if (managePackages) {
 			registerCallback(callBack);
@@ -1444,10 +1557,10 @@ public class SwankInterface {
 			callBack.run();
 		}
 	}
-	
+
 	public synchronized LispNode getInstalledPackages(long timeout) {
 		if ( managePackages ){
-			
+
 			SyncCallback callback = new SyncCallback();
 			++messageNum;
 			syncJobs.put(new Integer(messageNum).toString(), callback);
@@ -1460,27 +1573,27 @@ public class SwankInterface {
 			return null;
 		}
 	}
-	
+
 	// X-ref
-	
+
 	public synchronized void sendGetCallers(String functionName, String pkg, SwankRunnable callBack) {
 		registerCallback(callBack);
 		emacsRex("(swank:xref (quote :callers) (quote \"" + LispUtil.formatCode(functionName) + "\"))", pkg);
 	}
-	
+
 	public synchronized void sendGetCallees(String functionName, String pkg, SwankRunnable callBack) {
 		registerCallback(callBack);
 		emacsRex("(swank:xref (quote :callees) (quote \"" + LispUtil.formatCode(functionName) + "\"))", pkg);
 	}
-	
+
 	// Profiling
-	
+
 	public synchronized void sendToggleProfileFunction(String functionName, String pkg, SwankRunnable callBack) {
 		registerCallback(callBack);
 		String msg = "(swank:toggle-profile-fdefinition \"" + LispUtil.formatCode(functionName) + "\")"; 
 		emacsRex(msg, pkg);
 	}
-	
+
 	public synchronized void sendReportProfile(SwankRunnable callBack) {
 		registerCallback(callBack);
 		emacsRex("(swank:profile-report)");
@@ -1488,33 +1601,47 @@ public class SwankInterface {
 		// else is evaluated
 		emacsRex("(swank:listener-eval \"nil\")");
 	}
-	
+
 	public synchronized void sendProfileReset(SwankRunnable callBack) {
 		registerCallback(callBack);
 		emacsRex("(swank:profile-reset)");
 	}
-	
-	
+
+
 	// Message and response/reply management:
-	
+
 	public String fetchDisplayText() {
 		return displayListener.fetchText();
 	}
-	
-	
+
+
 	public synchronized boolean emacsRex(String message) {
 		return emacsRexWithThread(message, ":repl-thread");
 	}
+
+
 	
+	public synchronized boolean emacsCreateRepl () {
+		String msg = "(:emacs-rex (swank:create-repl nil) nil t "+messageNum+")";
+		return emacsRexWithThread("(swank:create-repl nil)","t");
+	}
+
+	public synchronized boolean emacsRexStartup(String message) {
+		return emacsRexWithThread(message, "t");
+	}
+	
+	public synchronized boolean emacsRexStartup(String message, String pkg) {
+		return emacsRexWithThread(message, pkg, "t");
+	}
 	
 	public synchronized boolean emacsRex(String message, String pkg) {
 		return emacsRexWithThread(message, pkg, ":repl-thread");
 	}
-	
+
 	public synchronized boolean emacsRexWithThread(String message,
 			String threadId) {
 		String msg = "(:emacs-rex " + message + " nil " + threadId + " "
-				+ messageNum + ")";
+		+ messageNum + ")";
 
 		return sendRaw(msg);
 	}
@@ -1522,17 +1649,17 @@ public class SwankInterface {
 	public synchronized boolean emacsRexWithThread(String message, String pkg,
 			String threadId) {
 		String msg = "(:emacs-rex " + message + " " + LispUtil.cleanPackage(pkg) + " "
-				+ threadId + " " + messageNum + ")";
+		+ threadId + " " + messageNum + ")";
 
 		return sendRaw(msg);
 	}
-	
+
 	protected synchronized void sendPong(String n1, String n2) {
 		String msg = "(:emacs-pong " + n1 + " " + n2 + ")";
 		sendRaw(msg);
 	}
-	
-	
+
+
 	public synchronized boolean sendRaw(String message) {
 		//message = message + "\n";
 		System.out.println("-->" + message);
@@ -1543,15 +1670,15 @@ public class SwankInterface {
 				// and hexadecimal expresses a larger range than decimal (and who's
 				// going to read 16M?)
 				String hexLen = Integer.toHexString(message.length());
-				
-	            switch (hexLen.length()) {
-	                case 1: out.write('0');
-	                case 2: out.write('0');
-	                case 3: out.write('0');
-	                case 4: out.write('0');
-	                case 5: out.write('0');
+
+				switch (hexLen.length()) {
+				case 1: out.write('0');
+				case 2: out.write('0');
+				case 3: out.write('0');
+				case 4: out.write('0');
+				case 5: out.write('0');
 				}
-				
+
 				out.writeBytes(hexLen);
 				out.write(message.getBytes("UTF-8"));
 				out.flush();
@@ -1565,7 +1692,7 @@ public class SwankInterface {
 		}
 		return true;
 	}
-	
+
 	private void signalResponse(LispNode reply) {
 		String jobNum = reply.get(reply.params.size() - 1).value;
 		Object r = jobs.get(jobNum);
@@ -1585,7 +1712,7 @@ public class SwankInterface {
 			} // if
 		} // else
 	}
-	
+
 	private void signalListeners(List<SwankRunnable> listeners, LispNode result) {
 		synchronized (listeners) {
 			for (SwankRunnable l : listeners) {
@@ -1596,104 +1723,108 @@ public class SwankInterface {
 			}
 		}
 	}
-	
+
 	private class ListenerThread extends Thread {
 		private abstract class ListenerDispatch {
 			public abstract void func(LispNode node);
 		}
 
+
 		private BufferedReader in;
 		public boolean running = true;
 		private Hashtable<String, ListenerDispatch> dispatch = new Hashtable<String, ListenerDispatch>();
-		
+
 		public ListenerThread(InputStream stream) {
 			super("Swank Listener");
-			
+
 			try {
-                in = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
-            } catch (UnsupportedEncodingException e) {
-            	System.out.println("Could not load UTF-8 character set -- something seriously wrong....");
-            	e.printStackTrace();
-            	throw new IllegalStateException("Could not initialize swank listener -- UTF-8 character set not available.", e);
-            }
-            
-            // You would think that there's an easier way to fill the Hashtable,
-            // but... put the special case handler actions in the dispatch hash
-            // table:
-            ListenerDispatch default_dispatch = new ListenerDispatch() {
-            	public void func(LispNode node) {
-            		signalResponse(node);
-            	}
-            };
-            
-            dispatch.put(":ping", new ListenerDispatch() {
-            	public void func(LispNode node) {
-            		sendPong(node.get(1).value, node.get(2).value);
-            	}
-            });
-            dispatch.put(":debug-activate", new ListenerDispatch() {
-            	public void func(LispNode node) {
-            		signalListeners(debugListeners, node);
-            	}
-            });
-            dispatch.put(":debug", new ListenerDispatch() {
-            	public void func(LispNode node) {
-            		signalListeners(debugInfoListeners, node);
-            	}
-            });
-            dispatch.put(":debug-return", new ListenerDispatch() {
-            	public void func(LispNode node) {
-            		signalListeners(debugReturnListeners, node);
-            	}
-            });
-            dispatch.put(":read-string", new ListenerDispatch() {
-            	public void func(LispNode node) {
-            		signalListeners(readListeners, node);
-            	}
-            });
-            dispatch.put(":presentation-start", new ListenerDispatch() {
-            	public void func(LispNode node) {
+				in = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
+			} catch (UnsupportedEncodingException e) {
+				System.out.println("Could not load UTF-8 character set -- something seriously wrong....");
+				e.printStackTrace();
+				throw new IllegalStateException("Could not initialize swank listener -- UTF-8 character set not available.", e);
+			}
+
+			// You would think that there's an easier way to fill the Hashtable,
+			// but... put the special case handler actions in the dispatch hash
+			// table:
+			ListenerDispatch default_dispatch = new ListenerDispatch() {
+				public void func(LispNode node) {
+					signalResponse(node);
+				}
+			};
+
+			dispatch.put(":ping", new ListenerDispatch() {
+				public void func(LispNode node) {
+					sendPong(node.get(1).value, node.get(2).value);
+				}
+			});
+			dispatch.put(":debug-activate", new ListenerDispatch() {
+				public void func(LispNode node) {
+					signalListeners(debugListeners, node);
+				}
+			});
+			dispatch.put(":debug", new ListenerDispatch() {
+				public void func(LispNode node) {
+					signalListeners(debugInfoListeners, node);
+				}
+			});
+			dispatch.put(":debug-return", new ListenerDispatch() {
+				public void func(LispNode node) {
+					signalListeners(debugReturnListeners, node);
+				}
+			});
+			dispatch.put(":read-string", new ListenerDispatch() {
+				public void func(LispNode node) {
+					signalListeners(readListeners, node);
+				}
+			});
+			dispatch.put(":presentation-start", new ListenerDispatch() {
+				public void func(LispNode node) {
 					String node1_value = node.get(1).value;
 					for (SwankRunnable r : displayListeners) {
 						((SwankDisplayRunnable) r).startPresentation(node1_value);
 					}
-            	}
-            });
-            dispatch.put(":presentation-end", new ListenerDispatch() {
-            	public void func(LispNode node) {
+				}
+			});
+			dispatch.put(":presentation-end", new ListenerDispatch() {
+				public void func(LispNode node) {
 					for (SwankRunnable r : displayListeners) {
 						((SwankDisplayRunnable) r).endPresentation();
 					}
-            	}
-            });
-            dispatch.put(":write-string", new ListenerDispatch() {
-            	public void func(LispNode node) {
+				}
+			});
+			dispatch.put(":write-string", new ListenerDispatch() {
+				public void func(LispNode node) {
 					signalListeners(displayListeners, node);
-            	}
-            });
-            dispatch.put(":indentation-update", new ListenerDispatch() {
-            	public void func(LispNode node) {
+				}
+			});
+			dispatch.put(":indentation-update", new ListenerDispatch() {
+				public void func(LispNode node) {
 					signalListeners(indentationListeners, node);
-            	}
-            });
-            dispatch.put(":return", default_dispatch);
-            dispatch.put(":reader-error", default_dispatch);
-            dispatch.put(":new-features", default_dispatch);
-            dispatch.put(":new-package", default_dispatch);
+				}
+			});
+			dispatch.put(":return", default_dispatch);
+			dispatch.put(":reader-error", default_dispatch);
+			dispatch.put(":new-features", default_dispatch);
+			dispatch.put(":new-package", default_dispatch);
 		}
-		
-		
+
+
 		private void handle(LispNode node) {
 			try {
 				ListenerDispatch l = dispatch.get(node.car().value);
 				if (l != null)
 					l.func(node);
 				else
-					System.err.println("** unhandled node type: " + node.toString());
+					throw new Exception("Cannot Find Appropriate Listener Dispatch: Likely that the stream has become out of sync!\n"+node.value);
+				//System.err.println("** unhandled node type: " + node.toString());
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
+
+		String totalBuf = "";
 		
 		public void run() {
 			// Each message is prefixed by a hex length, so create a permanent
@@ -1706,30 +1837,54 @@ public class SwankInterface {
 			// reply is the String version of rbuf.
 			String reply = new String();
 			int nread = 0;
-			
+
 			while (running) {
-				try {
-					if (true) {
-						nread = in.read(lbuf, 0, lbuf.length);
-						if (nread < 0) {
-							System.out.println("Connection closed");
-							signalListeners(disconnectListeners, new LispNode());
-							return;
-						}
+			
+					try {
 						
-						String lstring = String.copyValueOf(lbuf, 0, lbuf.length);
+						if (true) {
+
+							nread = in.read(lbuf, 0, lbuf.length);
+							if (nread < 0) {
+								System.out.println("Connection closed");
+								signalListeners(disconnectListeners, new LispNode());
+								return;
+							}
+							
+							if (nread!=lbuf.length) {
+								while (true) {
+									int numExtra= in.read(lbuf,nread,lbuf.length-nread);
+									if (numExtra<0) {
+										System.out.println("Connection closed");
+										signalListeners(disconnectListeners, new LispNode());
+										return;
+									}
+									nread+=numExtra;
+									if (nread==lbuf.length) 
+										break;
+									
+								}
+							} 
+							
+							String lstring = String.copyValueOf(lbuf, 0, lbuf.length);
+					
+						//totalBuf+=lstring;
+
 						int length = Integer.parseInt(lstring, 16);
 						
 						if (length > rbuf.length)
 							rbuf = new char[length];
-						
+
 						// Because we're sitting on a network socket, there's a good possibility
 						// that the reply exceeds the host's localhost MTU, so we need to be aggressive
-						// in collecting the entire reply (and there will only be one MTU "in flight"
+						// in collecting the entire reply (and tqQQQhere will only be one MTU "in flight"
 						// at any given point in time.)
 						nread = 0;
+						int n=0;
 						do {
-							int n = in.read(rbuf, nread, length - nread);
+							n = in.read(rbuf, nread, length - nread);
+							
+							assert n==(length-nread);
 							if (n < 0) {
 								System.out.println("Connection closed");
 								signalListeners(disconnectListeners, new LispNode());
@@ -1737,46 +1892,48 @@ public class SwankInterface {
 							}
 							nread += n;
 						} while (nread < length);
-						
+
 						// Reify the string...
 						reply = String.copyValueOf(rbuf, 0, nread);
-						System.out.println("<--" + reply);
-						System.out.flush();
-						if (reply.contains("open-dedicated-output-stream")) {
-							StringTokenizer tokens = new StringTokenizer(reply, " )");
-							while (tokens.hasMoreTokens()) {
-								try {
-									String token = tokens.nextToken();
-									System.out.println(token);
-									int tmp = Integer.parseInt(token);
-									System.out.println("secondary:" + tmp);
-									secondary = new Socket("localhost", tmp);
-									displayListener 
-										= new DisplayListenerThread(secondary.getInputStream(), true);
-									displayListener.start();
-								} catch (Exception e){
-									//e.printStackTrace();
-								} // catch
-							} // while
-						} else {
-							//System.out.println("parsing");
-							handle(LispParser.parse(reply.substring(1)));
-						}
-					} // if
-					
+					}
+					System.out.println("<--" + reply);
+					System.out.flush();
+					if (reply.contains("open-dedicated-output-stream")) {
+						StringTokenizer tokens = new StringTokenizer(reply, " )");
+						while (tokens.hasMoreTokens()) {
+							try {
+								String token = tokens.nextToken();
+								System.out.println(token);
+								int tmp = Integer.parseInt(token);
+								System.out.println("secondary:" + tmp);
+								secondary = new Socket("localhost", tmp);
+								displayListener 
+								= new DisplayListenerThread(secondary.getInputStream(), true);
+								displayListener.start();
+							} catch (Exception e){
+								//e.printStackTrace();
+							} // catch
+						} // while
+					} else {
+						//System.out.println("parsing");
+						handle(LispParser.parse(reply.substring(1))); //,reply,totalBuf);
+					}
+					 // if
+
 				} catch (IOException e) {
 					e.printStackTrace();
 					signalListeners(disconnectListeners, new LispNode());
 					return;
 				}
+				
 			} // while
 			System.out.println("Done listening");
 		}
-		
+
 	} // class
-	
-	
-	
+
+
+
 	private class DisplayListenerThread extends Thread {
 		private BufferedReader in;
 		public boolean running = true;
@@ -1790,7 +1947,7 @@ public class SwankInterface {
 		// N.B. need to keep this small enough so that stdOut/stdErr interleave in an
 		// intelligible manner (i.e. errors are correlated to the previous output.)
 		private final int MAX_READ = 8;
-		
+
 		public DisplayListenerThread(InputStream stream, boolean echo_flag) {
 			super ("Secondary Swank Listener");
 			in = new BufferedReader(new InputStreamReader(stream));
@@ -1799,20 +1956,20 @@ public class SwankInterface {
 			echo = echo_flag;
 			filters = Collections.synchronizedList(new ArrayList<DisplayFilter>(1));
 		}
-		
-		
+
+
 		public void addFilter(DisplayFilter filter) {
 			synchronized(filters) {
 				filters.add(filter);
 			}
 		}
-		
+
 		public void removeFilter(DisplayFilter filter) {
 			synchronized(filters) {
 				filters.remove(filter);
 			}
 		}
-		
+
 		private void runFilters(String str) {
 			synchronized(filters) {
 				for (DisplayFilter f : filters) {
@@ -1820,7 +1977,7 @@ public class SwankInterface {
 				}
 			}
 		}
-		
+
 		public String fetchText() {
 			synchronized(acc) {
 				String ret = acc.toString();
@@ -1828,8 +1985,8 @@ public class SwankInterface {
 				return ret;
 			}
 		}
-		
-		
+
+
 		public void run() {
 			char [] cbuf = new char[MAX_READ];
 
@@ -1850,7 +2007,7 @@ public class SwankInterface {
 						}
 						// N.B., if naddl < 0, we'll catch that next iteration
 					}
-					
+
 					synchronized(acc) {
 						acc.append(cbuf, 0, nread);
 						for (int nl = acc.indexOf("\n"); nl >= 0 && acc.length() > 0; nl = acc.indexOf("\n")) {
@@ -1879,7 +2036,7 @@ public class SwankInterface {
 				}
 			}
 		}
-		
+
 	} // class
 
 	// Internal abstract class for filtering strings collected by DisplayListenerThread.
@@ -1889,18 +2046,18 @@ public class SwankInterface {
 	private abstract class DisplayFilter {
 		public abstract void filter(String str);
 	} // class
-	
+
 	private class SwankStartFilter extends DisplayFilter {
 		private boolean got_start_string;
-		
+
 		public SwankStartFilter() {
 			got_start_string = false;
 		}
-		
+
 		public synchronized boolean getStartStringFlag() {
 			return got_start_string;
 		}
-		
+
 		public void filter(String str) {
 			if (str.contains("Swank started")) {
 				synchronized (this) {
@@ -1912,7 +2069,7 @@ public class SwankInterface {
 	} // class
 
 } // class
-	
+
 
 
 

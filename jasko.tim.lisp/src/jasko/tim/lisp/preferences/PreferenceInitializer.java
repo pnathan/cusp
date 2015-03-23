@@ -7,6 +7,7 @@ import java.util.Map;
 import org.eclipse.core.runtime.preferences.AbstractPreferenceInitializer;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.swt.graphics.RGB;
+import org.eclipse.ui.texteditor.AbstractDecoratedTextEditorPreferenceConstants;
 
 import jasko.tim.lisp.LispPlugin;
 import jasko.tim.lisp.ColorManager;
@@ -14,6 +15,7 @@ import jasko.tim.lisp.ColorManager;
 /**
  * Class used to initialize default preference values.
  */
+
 public class PreferenceInitializer extends AbstractPreferenceInitializer implements PreferenceConstants {
 
     private static final HashMap<String, String> DEFAULT_COLOR_MAP = new HashMap<String, String>();
@@ -42,24 +44,32 @@ public class PreferenceInitializer extends AbstractPreferenceInitializer impleme
 	 * 
 	 * @see org.eclipse.core.runtime.preferences.AbstractPreferenceInitializer#initializeDefaultPreferences()
 	 */
+    public static IPreferenceStore getStore ()
+    {
+    	return LispPlugin.getDefault().getPreferenceStore();
+    }
+    
 	public void initializeDefaultPreferences() {
+	
 		IPreferenceStore store = LispPlugin.getDefault().getPreferenceStore();
 		for (Map.Entry<String, String> e: DEFAULT_COLOR_MAP.entrySet()) {
 			store.setDefault((String)e.getKey(), (String)e.getValue());
 		}
         
+		store.setDefault(LISP_ENVIRONMENT,"");
 		store.setDefault(MANAGE_PACKAGES, true);
 		store.setDefault(USE_UNIT_TEST, true);
 		store.setDefault(BUILD_TYPE, USE_AUTO_BUILD);
-		
+		store.setDefault(LISP_TYPE,SBCL_LISP);
 		store.setDefault(SHOW_OUTLINE_HINT, true);
 		
-		store.setDefault(SHOW_EVAL_IN_REPL, false);
+		store.setDefault(SHOW_EVAL_IN_REPL, true);
 		store.setDefault(USE_CTRL_ENTER, false);
-        store.setDefault(PAIR_EDIT_BRACKETS, true);
-        store.setDefault(PAIR_SMART_BRACKETS, true);
+		//TODO: Make Paredit
+        store.setDefault(PAIR_EDIT_BRACKETS, false);
+        store.setDefault(PAIR_SMART_BRACKETS, false);
         store.setDefault(PAIR_EDIT_BRACES, false);
-        store.setDefault(PAIR_EDIT_QUOTES, true);
+        store.setDefault(PAIR_EDIT_QUOTES, false);
         store.setDefault(PAIR_EDIT_COMMENTS, true);
         store.setDefault(AUTO_POPUP_COMPLETIONS, true);
         store.setDefault(AUTO_POPUP_COMPLETIONS_DELAY, 700);
@@ -82,7 +92,25 @@ public class PreferenceInitializer extends AbstractPreferenceInitializer impleme
         store.setDefault(REMOTE_LISP_EXE, "sbcl");
         store.setDefault(REMOTE_INI, "~/.sbcl/slime/swank-loader.lisp");
         
-	}
+        store.setDefault(INDENT_ON_NO_ENCLOSING_SEXP,true);
+        store.setDefault(INDENT_PREVIOUS_LINE,true);
+        store.setDefault(EVALUATE_HIGHLIGHT,true);
+        store.setDefault(AUTOFOCUS_DEBUGGER,false);
+        store.setDefault(SWITCH_TO_EDITOR_FROM_DEBUGGER_IF,true);
+        store.setDefault(EVAL_IN_PACKAGE,false);
+        
+        store.setDefault(ALLOW_TABS,false);
+	   	store.setDefault(EXTERNAL_COPY_FILE,true);
+	   	store.setDefault(EXTERNAL_SHOW,true);
+	   	store.setDefault(SHOW_ECLIPSE_COMPILE_WARNING_DIALOG,true);
+	   	
+	   	store.setDefault(STRING_INDENT_MODE,INDENT_FIRST_LINE);
+        store.setDefault(SPECIAL_WITH_INDENT, true);
+        
+	   	store.setDefault(ON_SAVE_CHECK_EXTRA ,false);
+	   	
+	
+	} 
 
 	/**
 	 * Returns the default rgb preference string for the given color id.

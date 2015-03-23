@@ -15,9 +15,8 @@ import org.eclipse.jface.resource.DataFormatException;
 import org.eclipse.jface.resource.StringConverter;
 import org.eclipse.swt.graphics.*;
 import org.eclipse.swt.widgets.Display;
-
+    
 public class ColorManager {
-
 	public static enum TokenType 
 	  { STRING, NUMBER, PAREN, KEYWORD, SYMBOL, PARAMS,
 		COMMENT, DEFAULT, GLOBAL, CONSTANT, SENT_MESSAGE, UCW_TAG,
@@ -80,6 +79,7 @@ public class ColorManager {
 	protected LispPlugin getPlugin() { return plugin; }
 	
 	protected IPropertyChangeListener colorPrefsChangeListener = new IPropertyChangeListener() {
+		@SuppressWarnings("deprecation")
 		public void propertyChange(PropertyChangeEvent event) {
 			//get the token type that corresponds to the modified property
 			TokenType toktype = preferenceStringToTokenType(event.getProperty());

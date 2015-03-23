@@ -1,6 +1,7 @@
 package jasko.tim.lisp.editors;
 
 import jasko.tim.lisp.ColorManager;
+import jasko.tim.lisp.util.InsensitiveWordPatternRule;
 
 import org.eclipse.jface.text.*;
 import org.eclipse.jface.text.rules.*;
@@ -10,7 +11,7 @@ import org.eclipse.swt.graphics.Color;
 public class LispScanner extends RuleBasedScanner {
 
 	public LispScanner(ColorManager manager, Color background) {
-		IRule[] rules = new IRule[11];
+		IRule[] rules = new IRule[12];
 		
 		IToken comment = new Token(
 			new TextAttribute(manager.getColor(ColorManager.TokenType.COMMENT), background, SWT.NORMAL));
@@ -58,7 +59,10 @@ public class LispScanner extends RuleBasedScanner {
 		rules[10] = keywordRule;
 		
 		
-		
+		IToken character = new Token(
+					new TextAttribute(manager.getColor(ColorManager.TokenType.SYMBOL), background, SWT.NORMAL));
+		rules[11] = new InsensitiveWordPatternRule(new CharacterDetector(), "#\\", "space", character);
+			
 		// Add generic whitespace rule.
 		//rules[7] = new WhitespaceRule(new LispWhitespaceDetector());
 		setRules(rules);

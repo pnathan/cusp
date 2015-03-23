@@ -19,6 +19,7 @@ import java.util.ArrayList;
 
 import org.eclipse.core.resources.*;
 import org.eclipse.core.runtime.*;
+import org.eclipse.jface.text.IDocument;
 import org.eclipse.ui.PlatformUI;
 
 public class LispBuilder extends IncrementalProjectBuilder {
@@ -194,13 +195,17 @@ public class LispBuilder extends IncrementalProjectBuilder {
 		}
 		try{
 			SwankInterface swank = LispPlugin.getDefault().getSwank();
-			String filename = file.getName();
-			String dir = file.getLocation().toPortableString();
-			dir = dir.substring(0, dir.length() - filename.length());
-			String pkg = LispUtil.getPackage(LispParser.fileToString(file),offset);
-			swank.sendCompileString(expr, filename, dir, offset, pkg, 
-					new CompileListener(file,offset,expr.length()));
-						
+			if (swank.isConnected()==true) {
+				String filename = file.getName();
+
+				String dir = file.getLocation().toPortableString();
+				dir = dir.substring(0, dir.length() - filename.length());
+				String pkg = LispUtil.getPackage(LispParser.fileToString(file),offset);
+				swank.sendCompileString(expr, filename, dir, offset, pkg, 
+						new CompileListener(file,offset,expr.length()));
+			} else {
+				System.out.println ("WARNING: Trying to compile file but swank isn't connected!");
+			}
 		} catch (Exception e){
 			e.printStackTrace();
 		}
@@ -252,9 +257,8 @@ public class LispBuilder extends IncrementalProjectBuilder {
   				LispMarkers.deleteCompileMarkers(file,offset,length);
   			}
  			
-			ReplView repl = (ReplView)PlatformUI.getWorkbench().getActiveWorkbenchWindow()
-				.getActivePage().findView(ReplView.ID);
- 			
+			ReplView repl = LispPlugin.findREPL();
+			if (repl!=null) {
 			LispNode res = result;
   			LispNode guts = res.getf(":return").getf(":ok").getf(":swank-compilation-unit");
   			if ( guts.isEmpty() || guts.value.equalsIgnoreCase("nil") ){
@@ -336,7 +340,7 @@ public class LispBuilder extends IncrementalProjectBuilder {
  					}
 				}
 			}
-			
+			}
 		}
 	}
 
@@ -497,6 +501,7 @@ public class LispBuilder extends IncrementalProjectBuilder {
 		return res;
 	}
 	
+	//weirdly enough, we use an IFile even when simply saving. Shouldn't we use a Document in which we can get Partitions?
 	private static boolean checkParenBalancing(IFile file){
 		if( !(file.getFileExtension().equalsIgnoreCase("lisp") 
 				|| file.getFileExtension().equalsIgnoreCase("el")
@@ -521,7 +526,7 @@ public class LispBuilder extends IncrementalProjectBuilder {
 				BufferedReader reader = new BufferedReader(
 						new InputStreamReader(file.getContents()));
 				String line = reader.readLine();
-				while (line != null) {				
+				while (line != null) {
 					for (int i=0; i<line.length(); ++i) {
 						if (inComment) {
 							int endComment = line.indexOf("|#", i);
@@ -536,10 +541,14 @@ public class LispBuilder extends IncrementalProjectBuilder {
 							}
 						}
 						char c = line.charAt(i);
-						if (c == '(' && !inQuotes && !(i > 1 && line.charAt(i-1) == '\\' && line.charAt(i-2) == '#')) {
+					//	if (c=='('||c==')') 
+					//	{
+					//		int ij=3;
+					//	}
+						if (c == '(' && !LispUtil.isSpecialCharPosition(line,i)&&!inQuotes && !(i > 1 && line.charAt(i-1) == '\\' && line.charAt(i-2) == '#')) {
 							++open;
 							parenData.add(new int[]{1,charOffset, lineNum});
-						} else if (c == ')' && !inQuotes && !(i > 1 && line.charAt(i-1) == '\\' && line.charAt(i-2) == '#')) {
+						} else if (c == ')' && !LispUtil.isSpecialCharPosition(line,i)&&!inQuotes && !(i > 1 && line.charAt(i-1) == '\\' && line.charAt(i-2) == '#')) {
 							++close;
 							parenData.add(new int[]{-1,charOffset,lineNum});
 							if (close > open) {
@@ -552,10 +561,13 @@ public class LispBuilder extends IncrementalProjectBuilder {
 							charOffset += line.length() - i;
 							i = line.length();
 							break;
-						} else if (c == '"' && !((i > 1 && inQuotes && (line.charAt(i-1) == '\\')) ||
-								(i > 2 && (!inQuotes && (line.charAt(i-1) == '\\' && line.charAt(i-2) == '#'))))) {
-							inQuotes = !inQuotes;
-						} else if (c == '#' && !(i > 1 && (line.charAt(i-1) == '\\' || line.charAt(i-2) == '#'))) {
+						} else if (c == '"' && !((i > 1 && inQuotes && LispUtil.oddSlash(line,i-1)))) {
+							//check if item is #\" or \"
+							if ((i > 2 && (!inQuotes && (line.charAt(i-1) != '\\' && line.charAt(i-2) != '#'))) 
+								|| (i>1&&line.charAt(i-1)!='\\') || i==0
+								 ) //This is pretty stupid to do. It won't work if the characacter is on the previous line. thats why we don't use this function!
+								inQuotes = !inQuotes;
+						} else if (c == '#' && !inQuotes&&!(i > 1 && (line.charAt(i-1) == '\\' || line.charAt(i-2) == '#'))) {
 							if (i+1 < line.length()) {
 								if (line.charAt(i+1) == '|') {
 									inComment = true;
@@ -566,8 +578,10 @@ public class LispBuilder extends IncrementalProjectBuilder {
 					} // for i
 					
 					++lineNum;
-					++charOffset;
+					//one for extra char at end, \r, one for newline?
+					charOffset+=2;
 					line = reader.readLine();
+					
 				}
 				if (open > close) { //go backwards
 					open = 0;
@@ -594,6 +608,8 @@ public class LispBuilder extends IncrementalProjectBuilder {
 		}
 	}
 
+
+	//TODO: Deprecate!
 	public static boolean checkLisp(IFile resource, int offset, int length) {
 		if( !(resource.getName().endsWith(".lisp") || resource.getName().endsWith(".el")
 						|| resource.getName().endsWith(".cl"))) {
@@ -603,13 +619,44 @@ public class LispBuilder extends IncrementalProjectBuilder {
 			try {
 				IFile file = (IFile) resource;
 				LispMarkers.deleteCompileMarkers(file, offset, length);								
-				System.out.println("*builder*");
 				boolean paren = checkParenBalancing(file);
 				LispNode code = LispParser.parse(file);
 				boolean pack = checkPackageDependence(code,file);
 				boolean commas = checkCommas(code,file);
 				checkMultipleDefuncs(code,file);
 				return (paren && pack && commas);
+			} catch (Exception e) {
+				e.printStackTrace();
+				return false;
+			}
+		}
+	}
+
+	public static boolean checkLispWithDoc(IFile resource,IDocument doc) {
+		return checkLispWithDoc(resource,doc,0,doc.getLength());		
+	}
+	
+	public static boolean checkLispWithDoc(IFile resource,IDocument doc, int offset, int length) {
+		if( !(resource.getName().endsWith(".lisp") || resource.getName().endsWith(".el")
+						|| resource.getName().endsWith(".cl"))) {
+			return false;
+		} else {
+			
+			try {
+				IFile file = (IFile) resource;
+				LispMarkers.deleteCompileMarkers(file,offset,length);
+				System.out.println("*builder*");
+				boolean paren = LispUtil.saveParensBalance(doc, file, 0, doc.getLength());
+				boolean checkExtra= LispPlugin.getStore().getBoolean(PreferenceConstants.ON_SAVE_CHECK_EXTRA);	
+				boolean pack = true, commas = true;
+				if (checkExtra) {
+					LispNode code = LispParser.parse(file);
+					pack = checkPackageDependence(code,file);
+					checkMultipleDefuncs(code,file);
+					commas = checkCommas(code,file);	
+				}
+				
+				return (paren&&pack&&commas);
 			} catch (Exception e) {
 				e.printStackTrace();
 				return false;
@@ -627,6 +674,7 @@ public class LispBuilder extends IncrementalProjectBuilder {
 				IFile file = (IFile) resource;
 				LispMarkers.deleteCompileMarkers(file);
 				System.out.println("*builder*");
+				//LispUtil.saveParensBalance(doc, file, 0, doc.getLength()-1);
 				boolean paren = checkParenBalancing(file);
 				LispNode code = LispParser.parse(file);
 				boolean pack = checkPackageDependence(code,file);

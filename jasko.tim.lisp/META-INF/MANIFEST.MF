@@ -3,7 +3,8 @@ Bundle-ManifestVersion: 2
 Bundle-Name: %Bundle-Name.0
 Bundle-SymbolicName: jasko.tim.lisp; singleton:=true
 Bundle-Version: 1.0.414
-Bundle-ClassPath: cusp.jar
+Bundle-ClassPath: cusp.jar,
+ classes/
 Bundle-Activator: jasko.tim.lisp.LispPlugin
 Require-Bundle: org.eclipse.core.runtime,
  org.eclipse.jface.text,
@@ -13,7 +14,10 @@ Require-Bundle: org.eclipse.core.runtime,
  org.eclipse.ui.ide,
  org.eclipse.ui.console,
  org.eclipse.compare,
- org.eclipse.debug.ui
+ org.eclipse.debug.ui,
+ org.eclipse.core.expressions,
+ org.eclipse.ui.navigator,
+ org.eclipse.core.filesystem
 Bundle-ActivationPolicy: lazy
 Bundle-RequiredExecutionEnvironment: J2SE-1.5
 Export-Package: jasko.tim.lisp;
@@ -120,5 +124,4 @@ Export-Package: jasko.tim.lisp;
    org.eclipse.jface.viewers,
    org.eclipse.swt.widgets",
  jasko.tim.lisp.wizards.actions;uses:="org.eclipse.jface.action,org.eclipse.ui,org.eclipse.jface.viewers"
-Import-Package: org.eclipse.core.expressions
 Bundle-Localization: plugin

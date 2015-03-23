@@ -128,7 +128,12 @@ public class NewProjectWiz extends Wizard implements INewWizard {
   				String[] natures = pdesc.getNatureIds();
   				String[] newNatures = new String[natures.length + 1];
   				System.arraycopy(natures, 0, newNatures, 0, natures.length);
+  				
+  				//if user decides to 'share repl', than simply get shared repl id
+  				//else, we create a new repl id, connect to a new swank, and show view!
   				newNatures[natures.length] = LispNature.NATURE_ID;
+  				//newNatures[natures.length+1] = LispPlugin.generateREPLId();
+  				
   				pdesc.setNatureIds(newNatures);
 
   				newProject.setDescription(pdesc, IResource.FORCE, monitor);
@@ -197,8 +202,8 @@ public class NewProjectWiz extends Wizard implements INewWizard {
 		newProject.close(monitor);
 		newProject.open(monitor);
 		
-
-		LispPlugin.getDefault().getSwank().compileAndLoadAsd(asd,true);
+		if (LispPlugin.getDefault().getSwank().isDisconnected()!=true)
+			LispPlugin.getDefault().getSwank().compileAndLoadAsd(asd,true);
 
 		monitor.setTaskName("Opening files for editing...");
 		getShell().getDisplay().asyncExec(new Runnable() {

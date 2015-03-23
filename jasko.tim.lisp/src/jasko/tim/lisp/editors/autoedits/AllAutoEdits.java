@@ -1,5 +1,6 @@
 package jasko.tim.lisp.editors.autoedits;
 
+
 import org.eclipse.jface.text.IAutoEditStrategy;
 
 public class AllAutoEdits {	

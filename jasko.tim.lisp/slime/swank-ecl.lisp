@@ -10,8 +10,11 @@
 
 (in-package :swank-backend)
 
+(declaim (optimize (debug 3)))
+
 (defvar *tmp*)
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
 (if (find-package :gray)
   (import-from :gray *gray-stream-symbols* :swank-backend)
   (import-from :ext *gray-stream-symbols* :swank-backend))
@@ -21,12 +24,13 @@
    :eql-specializer-object
    :generic-function-declarations
    :specializer-direct-methods
-   :compute-applicable-methods-using-classes))
+   :compute-applicable-methods-using-classes)))
 
 
 ;;;; TCP Server
 
-(require 'sockets)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (require 'sockets))
 
 (defun resolve-hostname (name)
   (car (sb-bsd-sockets:host-ent-addresses
@@ -67,6 +71,16 @@
 
 (defimplementation preferred-communication-style ()
   (values nil))
+
+(defvar *external-format-to-coding-system*
+  '((:iso-8859-1
+     "latin-1" "latin-1-unix" "iso-latin-1-unix" 
+     "iso-8859-1" "iso-8859-1-unix")
+    (:utf-8 "utf-8" "utf-8-unix")))
+
+(defimplementation find-external-format (coding-system)
+  (car (rassoc-if (lambda (x) (member coding-system x :test #'equal))
+                  *external-format-to-coding-system*)))
 
 
 ;;;; Unix signals
@@ -120,7 +134,7 @@
    :location
    (if *buffer-name*
        (make-location (list :buffer *buffer-name*)
-                      (list :position *buffer-start-position*))
+                      (list :offset *buffer-start-position* 0))
        ;; ;; compiler::*current-form*
        ;; (if compiler::*current-function*
        ;;     (make-location (list :file *compile-filename*)
@@ -136,24 +150,23 @@
   (handler-bind ((warning #'handle-compiler-warning))
     (funcall function)))
 
-(defimplementation swank-compile-file (*compile-filename* load-p
-                                       external-format)
+(defimplementation swank-compile-file (input-file output-file
+                                       load-p external-format)
   (declare (ignore external-format))
   (with-compilation-hooks ()
-    (let ((*buffer-name* nil))
-      (multiple-value-bind (fn warn fail) 
-          (compile-file *compile-filename*)
-        (when load-p (unless fail (load fn)))))))
+    (let ((*buffer-name* nil)
+          (*compile-filename* input-file))
+      (compile-file input-file :output-file output-file :load t))))
 
-(defimplementation swank-compile-string (string &key buffer position directory
-                                                debug)
-  (declare (ignore directory debug))
+(defimplementation swank-compile-string (string &key buffer position filename
+                                         policy)
+  (declare (ignore filename policy))
   (with-compilation-hooks ()
     (let ((*buffer-name* buffer)
           (*buffer-start-position* position)
           (*buffer-string* string))
       (with-input-from-string (s string)
-        (compile-from-stream s :load t)))))
+        (not (nth-value 2 (compile-from-stream s :load t)))))))
 
 (defun compile-from-stream (stream &rest args)
   (let ((file (si::mkstemp "TMP:ECLXXXXXX")))
@@ -168,31 +181,47 @@
 
 ;;;; Documentation
 
+(defun grovel-docstring-for-arglist (name type)
+  (flet ((compute-arglist-offset (docstring)
+           (when docstring
+             (let ((pos1 (search "Args: " docstring)))
+               (if pos1
+                   (+ pos1 6)
+                   (let ((pos2 (search "Syntax: " docstring)))
+                     (when pos2
+                       (+ pos2 8))))))))
+    (let* ((docstring (si::get-documentation name type))
+           (pos (compute-arglist-offset docstring)))
+      (if pos
+          (multiple-value-bind (arglist errorp)
+              (ignore-errors
+                (values (read-from-string docstring t nil :start pos)))
+            (if (or errorp (not (listp arglist)))
+                :not-available
+                (cdr arglist)))
+          :not-available ))))
+
 (defimplementation arglist (name)
-  (or (functionp name) (setf name (symbol-function name)))
-  (if (functionp name)
-      (typecase name 
-        (generic-function
-         (clos::generic-function-lambda-list name))
-        (compiled-function
-         ; most of the compiled functions have an Args: line in their docs
-         (with-input-from-string (s (or
-                                     (si::get-documentation
-                                      (si:compiled-function-name name) 'function)
-                                     ""))
-           (do ((line (read-line s nil) (read-line s nil)))
-               ((not line) :not-available)
-             (ignore-errors
-               (if (string= (subseq line 0 6) "Args: ")
-                   (return-from nil
-                     (read-from-string (subseq line 6))))))))
-         ;
-        (function
-         (let ((fle (function-lambda-expression name)))
-           (case (car fle)
-             (si:lambda-block (caddr fle))
-             (t               :not-available)))))
-      :not-available))
+  (cond ((special-operator-p name)
+         (grovel-docstring-for-arglist name 'function))
+        ((macro-function name)
+         (grovel-docstring-for-arglist name 'function))
+        ((or (functionp name) (fboundp name))
+         (multiple-value-bind (name fndef)
+             (if (functionp name)
+                 (values (function-name name) name)
+                 (values name (fdefinition name)))
+           (typecase fndef
+             (generic-function
+              (clos::generic-function-lambda-list fndef))
+             (compiled-function
+              (grovel-docstring-for-arglist name 'function))
+             (function
+              (let ((fle (function-lambda-expression fndef)))
+                (case (car fle)
+                  (si:lambda-block (caddr fle))
+                  (t               :not-available)))))))
+        (t :not-available)))
 
 (defimplementation function-name (f)
   (si:compiled-function-name f))
@@ -218,23 +247,24 @@
 
 ;;; Debugging
 
-(import
- '(si::*break-env*
-   si::*ihs-top*
-   si::*ihs-current*
-   si::*ihs-base*
-   si::*frs-base*
-   si::*frs-top*
-   si::*tpl-commands*
-   si::*tpl-level*
-   si::frs-top
-   si::ihs-top
-   si::ihs-fun
-   si::ihs-env
-   si::sch-frs-base
-   si::set-break-env
-   si::set-current-ihs
-   si::tpl-commands))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (import
+   '(si::*break-env*
+     si::*ihs-top*
+     si::*ihs-current*
+     si::*ihs-base*
+     si::*frs-base*
+     si::*frs-top*
+     si::*tpl-commands*
+     si::*tpl-level*
+     si::frs-top
+     si::ihs-top
+     si::ihs-fun
+     si::ihs-env
+     si::sch-frs-base
+     si::set-break-env
+     si::set-current-ihs
+     si::tpl-commands)))
 
 (defvar *backtrace* '())
 
@@ -265,19 +295,30 @@
      (declare (ignore position))
      (if file (is-swank-source-p file)))))
 
+#+#.(swank-backend::with-symbol '+ECL-VERSION-NUMBER+ 'EXT)
+(defmacro find-ihs-top (x)
+  (if (< ext:+ecl-version-number+ 90601)
+      `(si::ihs-top ,x)
+      '(si::ihs-top)))
+
+#-#.(swank-backend::with-symbol '+ECL-VERSION-NUMBER+ 'EXT)
+(defmacro find-ihs-top (x) 
+  `(si::ihs-top ,x))
+
 (defimplementation call-with-debugging-environment (debugger-loop-fn)
   (declare (type function debugger-loop-fn))
   (let* ((*tpl-commands* si::tpl-commands)
-         (*ihs-top* (ihs-top 'call-with-debugging-environment))
-	 (*ihs-current* *ihs-top*)
-	 (*frs-base* (or (sch-frs-base *frs-top* *ihs-base*) (1+ (frs-top))))
-	 (*frs-top* (frs-top))
-	 (*read-suppress* nil)
-	 (*tpl-level* (1+ *tpl-level*))
-         (*backtrace* (loop for ihs from *ihs-base* below *ihs-top*
+         (*ihs-top* (find-ihs-top 'call-with-debugging-environment))
+         (*ihs-current* *ihs-top*)
+         (*frs-base* (or (sch-frs-base *frs-top* *ihs-base*) (1+ (frs-top))))
+         (*frs-top* (frs-top))
+         (*read-suppress* nil)
+         (*tpl-level* (1+ *tpl-level*))
+         (*backtrace* (loop for ihs from 0 below *ihs-top*
                             collect (list (si::ihs-fun ihs)
                                           (si::ihs-env ihs)
                                           nil))))
+    (declare (special *ihs-current*))
     (loop for f from *frs-base* until *frs-top*
           do (let ((i (- (si::frs-ihs f) *ihs-base* 1)))
                (when (plusp i)
@@ -286,7 +327,7 @@
                    (unless (si::fixnump name)
                      (push name (third x)))))))
     (setf *backtrace* (remove-if #'is-ignorable-fun-p (nreverse *backtrace*)))
-    (Setf *tmp* *backtrace*)
+    (setf *tmp* *backtrace*)
     (set-break-env)
     (set-current-ihs)
     (let ((*ihs-base* *ihs-top*))
@@ -294,13 +335,14 @@
 
 (defimplementation call-with-debugger-hook (hook fun)
   (let ((*debugger-hook* hook)
-        (*ihs-base*(si::ihs-top 'call-with-debugger-hook)))
+        (*ihs-base* (find-ihs-top 'call-with-debugger-hook)))
     (funcall fun)))
 
 (defimplementation compute-backtrace (start end)
   (when (numberp end)
     (setf end (min end (length *backtrace*))))
-  (subseq *backtrace* start end))
+  (loop for f in (subseq *backtrace* start end)
+        collect f))
 
 (defun frame-name (frame)
   (let ((x (first frame)))
@@ -327,10 +369,16 @@
   (let ((functions '())
         (blocks '())
         (variables '()))
-    (dolist (record (second frame))
+    #+#.(swank-backend::with-symbol '+ECL-VERSION-NUMBER+ 'EXT)
+    #.(if (< ext:+ecl-version-number+ 90601)
+        '(setf frame (second frame))
+        '(setf frame (si::decode-ihs-env (second frame))))
+    #-#.(swank-backend::with-symbol '+ECL-VERSION-NUMBER+ 'EXT)
+    '(setf frame (second frame))
+    (dolist (record frame)
       (let* ((record0 (car record))
 	     (record1 (cdr record)))
-	(cond ((symbolp record0)
+	(cond ((or (symbolp record0) (stringp record0))
 	       (setq variables (acons record0 record1 variables)))
 	      ((not (si::fixnump record0))
 	       (push record1 functions))
@@ -343,7 +391,7 @@
 (defimplementation print-frame (frame stream)
   (format stream "~A" (first frame)))
 
-(defimplementation frame-source-location-for-emacs (frame-number)
+(defimplementation frame-source-location (frame-number)
   (nth-value 1 (frame-function (elt *backtrace* frame-number))))
 
 (defimplementation frame-catch-tags (frame-number)
@@ -434,10 +482,46 @@
               `(:position ,pos)
               `(:snippet
                 ,(with-open-file (s file)
+
+                                 #+#.(swank-backend::with-symbol '+ECL-VERSION-NUMBER+ 'EXT)
+                                 (if (< ext:+ecl-version-number+ 90601)
+                                     (skip-toplevel-forms pos s)
+                                     (file-position s pos))
+                                 #-#.(swank-backend::with-symbol '+ECL-VERSION-NUMBER+ 'EXT)
                                  (skip-toplevel-forms pos s)
                                  (skip-comments-and-whitespace s)
                                  (read-snippet s))))))))
    `(:error (format nil "Source definition of ~S not found" obj))))
+
+;;;; Profiling
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (require 'profile))
+
+(defimplementation profile (fname)
+  (when fname (eval `(profile:profile ,fname))))
+
+(defimplementation unprofile (fname)
+  (when fname (eval `(profile:unprofile ,fname))))
+
+(defimplementation unprofile-all ()
+  (profile:unprofile-all)
+  "All functions unprofiled.")
+
+(defimplementation profile-report ()
+  (profile:report))
+
+(defimplementation profile-reset ()
+  (profile:reset)
+  "Reset profiling counters.")
+
+(defimplementation profiled-functions ()
+  (profile:profile))
+
+(defimplementation profile-package (package callers methods)
+  (declare (ignore callers methods))
+  (eval `(profile:profile ,(package-name (find-package package)))))
+
 
 ;;;; Threads
 

@@ -1,6 +1,7 @@
 package jasko.tim.lisp.preferences;
 
 import org.eclipse.jface.preference.*;
+import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.layout.GridData;
@@ -8,6 +9,7 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Group;
 import org.eclipse.ui.IWorkbenchPreferencePage;
 import org.eclipse.ui.IWorkbench;
 import jasko.tim.lisp.LispPlugin;
@@ -24,16 +26,14 @@ public class REPLPreferencePage extends FieldEditorPreferencePage implements IWo
         // to hook into the proper extension points -- however, the font styles extension point I found was
         // deprecated in Eclipse 3.0 in favor of the UI themes stuff, which is more of a hairball than
         // I can bring myself to figure out right this minute.  - Chas Emerick
-        
-//        final ArrayList<FieldEditor> replInspectableStyleEditors = new ArrayList<FieldEditor>();
+        //final ArrayList<FieldEditor> replInspectableStyleEditors = new ArrayList<FieldEditor>();
         final Composite parent = getFieldEditorParent();
-        
         addField(new BooleanFieldEditor(PreferenceConstants.USE_CTRL_ENTER,
         		"Eval on Ctrl+Enter. Use it when 'Automatically close (' is on.", 
         		parent));
 
         addField(new BooleanFieldEditor(PreferenceConstants.SHOW_EVAL_IN_REPL,
-        		"Show expression evaluated from file in REPL", parent));
+        		"Show expression evaluated from file in REPL",parent));
 
         /*addField(new BooleanFieldEditor(PreferenceConstants.DEBUG_HIDE_SWANK_FRAMES,
         		"Clean up backtraces in debugger: don't show swank frames.", 

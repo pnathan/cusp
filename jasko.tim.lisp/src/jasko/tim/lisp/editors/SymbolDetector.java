@@ -1,5 +1,6 @@
 package jasko.tim.lisp.editors;
 
+import org.eclipse.core.filesystem.IFileStore;
 import org.eclipse.jface.text.rules.IWordDetector;
 
 public class SymbolDetector implements IWordDetector {
