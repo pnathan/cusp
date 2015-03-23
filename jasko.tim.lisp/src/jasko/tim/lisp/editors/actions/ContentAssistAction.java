@@ -17,6 +17,8 @@ public class ContentAssistAction extends LispAction {
     }
     
     public void setActiveEditor(IAction action, IEditorPart targetEditor) {
+       // java.lang.ClassCastException: org.eclipse.ui.internal.ErrorEditorPart cannot be cast to jasko.tim.lisp.editors.ILispEditor
+
         editor = (ILispEditor)targetEditor;
     }
     

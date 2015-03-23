@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: %Bundle-Name.0
-Bundle-SymbolicName: cusp;singleton:=true
+Bundle-SymbolicName: jasko.tim.lisp;singleton:=true
 Bundle-Version: 2.0
 Bundle-ClassPath: cusp.jar
 Bundle-Activator: jasko.tim.lisp.LispPlugin

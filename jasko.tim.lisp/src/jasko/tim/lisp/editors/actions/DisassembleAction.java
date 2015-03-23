@@ -5,7 +5,7 @@ import jasko.tim.lisp.editors.ILispEditor;
 import jasko.tim.lisp.swank.*;
 
 
-public class DisassembleAction extends LispAction {
+public class DisassembleAction extends LispAction implements IEditorAction {
 	
 	public DisassembleAction() {
 	}
@@ -14,7 +14,11 @@ public class DisassembleAction extends LispAction {
 		super(editor);
 	}
 	
-	public void run() {
+	/* (non-Javadoc)
+    * @see jasko.tim.lisp.editors.actions.IEditorAction#run()
+    */
+	@Override
+   public void run() {
 		String sym = getSymbol();
 
 		LispPlugin.getDefault().getSwank().sendDisassemble(sym, getPackage(),

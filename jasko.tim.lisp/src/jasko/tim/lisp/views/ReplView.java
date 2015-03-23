@@ -21,6 +21,7 @@ import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.custom.VerifyKeyListener;
 import org.eclipse.swt.events.*;
 import org.eclipse.swt.graphics.*;
+import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.jface.action.*;
 import org.eclipse.jface.dialogs.Dialog;
@@ -29,12 +30,15 @@ import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.resource.*;
 import org.eclipse.jface.text.*;
 import org.eclipse.jface.text.source.*;
-
 import org.eclipse.ui.contexts.IContextService;
 import org.eclipse.ui.handlers.IHandlerService;
 import org.eclipse.jface.commands.ActionHandler;
+import org.eclipse.ui.IEditorInput;
+import org.eclipse.ui.IEditorSite;
+import org.eclipse.ui.IPropertyListener;
 import org.eclipse.ui.IViewPart;
 import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.IWorkbenchPartSite;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.part.ViewPart;
@@ -208,6 +212,115 @@ public class ReplView extends ViewPart implements SelectionListener {
     	    mb.setMessage(msg);
     	    mb.open(); 	
     	}
+
+      @Override
+      public IEditorInput getEditorInput() {
+         // TODO Auto-generated method stub
+         return null;
+      }
+
+      @Override
+      public IEditorSite getEditorSite() {
+         // TODO Auto-generated method stub
+         return null;
+      }
+
+      @Override
+      public void init(IEditorSite site, IEditorInput input)
+               throws PartInitException {
+         // TODO Auto-generated method stub
+         
+      }
+
+      @Override
+      public void addPropertyListener(IPropertyListener listener) {
+         // TODO Auto-generated method stub
+         
+      }
+
+      @Override
+      public void createPartControl(Composite parent) {
+         // TODO Auto-generated method stub
+         
+      }
+
+      @Override
+      public void dispose() {
+         // TODO Auto-generated method stub
+         
+      }
+
+      @Override
+      public IWorkbenchPartSite getSite() {
+         // TODO Auto-generated method stub
+         return null;
+      }
+
+      @Override
+      public String getTitle() {
+         // TODO Auto-generated method stub
+         return null;
+      }
+
+      @Override
+      public Image getTitleImage() {
+         // TODO Auto-generated method stub
+         return null;
+      }
+
+      @Override
+      public String getTitleToolTip() {
+         // TODO Auto-generated method stub
+         return null;
+      }
+
+      @Override
+      public void removePropertyListener(IPropertyListener listener) {
+         // TODO Auto-generated method stub
+         
+      }
+
+      @Override
+      public void setFocus() {
+         // TODO Auto-generated method stub
+         
+      }
+
+      @Override
+      public Object getAdapter(Class adapter) {
+         // TODO Auto-generated method stub
+         return null;
+      }
+
+      @Override
+      public void doSave(IProgressMonitor monitor) {
+         // TODO Auto-generated method stub
+         
+      }
+
+      @Override
+      public void doSaveAs() {
+         // TODO Auto-generated method stub
+         
+      }
+
+      @Override
+      public boolean isDirty() {
+         // TODO Auto-generated method stub
+         return false;
+      }
+
+      @Override
+      public boolean isSaveAsAllowed() {
+         // TODO Auto-generated method stub
+         return false;
+      }
+
+      @Override
+      public boolean isSaveOnCloseNeeded() {
+         // TODO Auto-generated method stub
+         return false;
+      }
     }
 
     private void addUndoManager(final TextViewer textViewer) {

@@ -1,10 +1,18 @@
 package jasko.tim.lisp.editors.actions;
 
-public class HyperSpecAction extends CallUrlAction {
+public class HyperSpecAction extends CallUrlAction implements IEditorAction {
 
+   private String uri;
+   
+   public HyperSpecAction() {}
+   
    public HyperSpecAction(Object object, String string) {
       super(object, string);
-      // TODO Auto-generated constructor stub
+      
+      this.uri = string;
    }
+   
+   public void run() {}
+   
    
 }
