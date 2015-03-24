@@ -17,8 +17,19 @@ notes
 
 
 directions
----
+===
 
 * decouple the repl better
 
 * strip out libs, add quicklisp
+
+inferior-lisp work
+===
+sbcl 1.2.9 and SLIME 2.13 will load together on emacs on OSX.
+
+The command issued to the sbcl is....
+
+    (progn
+      (load "/Users/<username>/.emacs.d/plugins/slime/swank-loader.lisp" :verbose t)
+      (funcall (read-from-string "swank-loader:init"))
+      (funcall (read-from-string "swank:start-server") "temp-folder"))
