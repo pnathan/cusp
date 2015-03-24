@@ -196,10 +196,9 @@ public class LispPlugin extends AbstractUIPlugin {
       return ""; //$NON-NLS-1$
    }
 
-   
    public SwankInterface getSwank() throws SwankNotFoundException {
-      if ( this.swank == null ) {
-         throw new SwankNotFoundException(); 
+      if (this.swank == null) {
+         throw new SwankNotFoundException();
       }
       return this.swank;
    }
@@ -234,6 +233,7 @@ public class LispPlugin extends AbstractUIPlugin {
          LispPlugin.RELEASE_DATE = props.getProperty("cusp.release_date"); //$NON-NLS-1$
 
          // startSwank(); // FIXME: do this with launcher rather on startup
+
       }
       catch (final Exception e) {
          e.printStackTrace();
@@ -273,8 +273,13 @@ public class LispPlugin extends AbstractUIPlugin {
    @Override
    public void stop(final BundleContext context) throws Exception {
       this.cm.dispose();
-      if ((getSwank() != null) && getSwank().isConnected()) {
-         this.swank.disconnect();
+      try {
+         if ((getSwank() != null) && getSwank().isConnected()) {
+            this.swank.disconnect();
+         }
+      }
+      catch (SwankNotFoundException e) {
+         e.printStackTrace();
       }
       LispPlugin.plugin = null;
       super.stop(context);

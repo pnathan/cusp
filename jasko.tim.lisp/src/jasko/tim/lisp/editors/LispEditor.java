@@ -356,7 +356,6 @@ public class LispEditor extends TextEditor implements ILispEditor {
             sorter.sortItems(topForms, TopLevelItemSort.Sort.Position);
          }
          catch (SwankNotFoundException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
          }
       }
@@ -735,7 +734,9 @@ public class LispEditor extends TextEditor implements ILispEditor {
 
       // === undefine removed forms (at the moment functions and tests only)
       try {
-          boolean undefineTests = LispPlugin.getDefault().getSwank().getUseUnitTest();
+         boolean undefineTests = LispPlugin.getDefault()
+                                           .getSwank()
+                                           .getUseUnitTest();
 
          for (String itm : toUndefine) {
             String[] item = itm.split(",");
